@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/eliukblau/pixterm/pkg/ansimage"
 	"github.com/go-shiori/go-readability"
+	"golang.org/x/crypto/ssh/terminal"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/spf13/cobra"
@@ -20,7 +21,7 @@ import (
 var MdImgRegex =
   regexp.MustCompile(`(?m)\[{0,1}!\[(:?\]\(.*\)){0,1}(.*)\]\((.+)\)`)
 var MdImgPlaceholderRegex =
-  regexp.MustCompile(`(?m)🖼([0-9]*)\$`)
+  regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
 
 type InlineImage struct {
   URL                        string
@@ -61,6 +62,11 @@ func HTMLtoMarkdown(html *string) (string, error) {
 func RenderImg(title, md *string) (string, error) {
   var images []InlineImage
 
+  width, _, err := terminal.GetSize(0)
+  if err != nil {
+    width = 80
+  }
+
   markdown := MdImgRegex.ReplaceAllStringFunc(*md, func(md string) (string) {
     imgs := MdImgRegex.FindAllStringSubmatch(md, -1)
     if len(imgs) < 1 {
@@ -76,11 +82,17 @@ func RenderImg(title, md *string) (string, error) {
     inlineImageIndex := len(images)
     images = append(images, inlineImage)
 
-    return fmt.Sprintf("🖼%d$", inlineImageIndex)
+    return fmt.Sprintf("$$$%d$", inlineImageIndex)
   })
 
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithEnvironmentConfig(),
+		glamour.WithWordWrap(width),
+	)
+
+
   output, err :=
-    glamour.RenderWithEnvironmentConfig(
+    renderer.Render(
       fmt.Sprintf("# %s\n\n%s", *title, markdown),
     )
   if err != nil {
@@ -101,9 +113,6 @@ func RenderImg(title, md *string) (string, error) {
 
       imgTitle := images[imgIndex].Title
       imgURL := images[imgIndex].URL
-
-      width := int(os.Stdout.Fd())
-      // width := 80
 
       pix, err := ansimage.NewScaledFromURL(
         imgURL,
