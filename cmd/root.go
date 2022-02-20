@@ -23,6 +23,8 @@ var MdImgRegex =
 var MdImgPlaceholderRegex =
   regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
 
+var noImages = false
+
 type InlineImage struct {
   URL                        string
   Title                      string
@@ -167,13 +169,18 @@ var rootCmd = &cobra.Command{
       os.Exit(1)
     }
 
-    output, err := RenderImg(&title, &markdown)
+    output := markdown
+    if noImages == false {
+      output, err = RenderImg(&title, &markdown)
+    }
 
     fmt.Print(output)
   },
 }
 
 func Execute() {
+  rootCmd.Flags().BoolVarP(&noImages, "no-images", "i", false, "disable image rendering")
+
   if err := rootCmd.Execute(); err != nil {
     fmt.Fprintln(os.Stderr, err)
     os.Exit(1)
