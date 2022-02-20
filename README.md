@@ -36,3 +36,20 @@ If you want to navigate through the page:
 reader $W3M_URL | less
 ```
 
+### Using `reader` from within `vim`/`neovim`
+
+Add the following function/mapping to your `init.vim`:
+
+```
+function s:vertopen_url()
+  normal! "uyiW
+  let mycommand = "reader " . @u
+  execute "vertical terminal " . mycommand
+endfunction
+noremap <Plug>vertopen_url : call <SID>vertopen_url()<CR>
+nmap gx <Plug>vertopen_url
+```
+
+Open a document and place the cursor on a link, then press `g` followed by `x`.
+Vim will open a new terminal and show you the output of `reader`.
+
