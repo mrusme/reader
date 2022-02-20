@@ -24,6 +24,7 @@ var MdImgPlaceholderRegex =
   regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
 
 var noImages = false
+var userAgent = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 
 type InlineImage struct {
   URL                        string
@@ -179,7 +180,19 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
-  rootCmd.Flags().BoolVarP(&noImages, "no-images", "i", false, "disable image rendering")
+  rootCmd.Flags().BoolVarP(
+    &noImages,
+    "no-images",
+    "i",
+    false,
+    "disable image rendering",
+  )
+  rootCmd.Flags().StringVarP(
+    &userAgent,
+    "user-agent",
+    "a",
+    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "set custom user agent string",
+  )
 
   if err := rootCmd.Execute(); err != nil {
     fmt.Fprintln(os.Stderr, err)
