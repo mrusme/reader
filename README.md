@@ -6,6 +6,10 @@ CLI.
 
 ![reader](demo.gif)
 
+`reader` parses a web page for its actual content and displays it in nicely
+highlighted text on the command line. In addition, `reader` renders embedded
+images from that page as colored block-renders on the terminal as well.
+
 
 ## Usage
 
