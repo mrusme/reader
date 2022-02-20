@@ -18,18 +18,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var MdImgRegex =
-  regexp.MustCompile(`(?m)\[{0,1}!\[(:?\]\(.*\)){0,1}(.*)\]\((.+)\)`)
-var MdImgPlaceholderRegex =
-  regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
-
-var noImages = false
-var userAgent = "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
+var noImages bool
+var userAgent string
 
 type InlineImage struct {
   URL                        string
   Title                      string
 }
+
+var mdImgRegex =
+  regexp.MustCompile(`(?m)\[{0,1}!\[(:?\]\(.*\)){0,1}(.*)\]\((.+)\)`)
+var mdImgPlaceholderRegex =
+  regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
+
 
 func MakeReadable(rawUrl *string) (string, string, error) {
   client := &http.Client{}
@@ -44,11 +45,18 @@ func MakeReadable(rawUrl *string) (string, string, error) {
     return "", "", err
   }
 
-  req.Header.Set("User-Agent", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
-  req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-  req.Header.Set("Accept-Language", "en-US,en;q=0.5")
-  req.Header.Set("DNT", "1")
-  req.Header.Set("Accept-Encoding", "deflate")
+  req.Header.Set("User-Agent",
+    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; " +
+      "Googlebot/2.1; +http://www.google.com/bot.html)")
+  req.Header.Set("Accept",
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif," +
+      "image/webp,*/*;q=0.8")
+  req.Header.Set("Accept-Language",
+    "en-US,en;q=0.5")
+  req.Header.Set("DNT",
+    "1")
+  req.Header.Set("Accept-Encoding",
+    "deflate")
 
   resp, err := client.Do(req)
   if err != nil {
@@ -83,8 +91,9 @@ func RenderImg(title, md *string) (string, error) {
     width = 80
   }
 
-  markdown := MdImgRegex.ReplaceAllStringFunc(*md, func(md string) (string) {
-    imgs := MdImgRegex.FindAllStringSubmatch(md, -1)
+  markdown := mdImgRegex.
+    ReplaceAllStringFunc(*md, func(md string) (string) {
+    imgs := mdImgRegex.FindAllStringSubmatch(md, -1)
     if len(imgs) < 1 {
       return md
     }
@@ -114,8 +123,9 @@ func RenderImg(title, md *string) (string, error) {
   if err != nil {
     output = fmt.Sprintf("%v", err)
   } else {
-    output = MdImgPlaceholderRegex.ReplaceAllStringFunc(output, func(md string) (string) {
-      imgs := MdImgPlaceholderRegex.FindAllStringSubmatch(md, -1)
+    output = mdImgPlaceholderRegex.
+      ReplaceAllStringFunc(output, func(md string) (string) {
+      imgs := mdImgPlaceholderRegex.FindAllStringSubmatch(md, -1)
       if len(imgs) < 1 {
         return md
       }
@@ -152,8 +162,8 @@ func RenderImg(title, md *string) (string, error) {
 var rootCmd = &cobra.Command{
   Use:   "reader <url>",
   Short: "Reader is a command line web reader",
-  Long: `A minimal command line reader offering
-                better readability of web pages on the CLI.`,
+  Long: "A minimal command line reader offering better readability of web " +
+          "pages on the CLI.",
   Args: cobra.MinimumNArgs(1),
   Run: func(cmd *cobra.Command, args []string) {
     rawUrl := args[0]
@@ -191,7 +201,9 @@ func Execute() {
     &userAgent,
     "user-agent",
     "a",
-    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html)", "set custom user agent string",
+    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; " +
+      "Googlebot/2.1; +http://www.google.com/bot.html)",
+    "set custom user agent string",
   )
 
   if err := rootCmd.Execute(); err != nil {
