@@ -1,7 +1,8 @@
 reader
 ------
 
-A minimal command line reader offering better readability of web pages on the
+*reader* is for your command line what the “readability” view is for modern
+browsers: A lightweight tool offering better readability of web pages on the
 CLI.
 
 ![reader](demo.gif)
