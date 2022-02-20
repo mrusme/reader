@@ -17,3 +17,16 @@ images from that page as colored block-renders on the terminal as well.
 reader https://xn--gckvb8fzb.com/superhighway84/
 ```
 
+## Examples
+
+### Using `reader` from within `w3m`
+
+While on a web page in w3m, press `!` and enter the following:
+
+```
+reader $W3M_URL
+```
+
+This will open the current url with `reader`. `w3m` will wait for you to press
+any key in order to resume browsing.
+
