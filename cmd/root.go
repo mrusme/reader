@@ -29,12 +29,25 @@ type InlineImage struct {
 }
 
 func MakeReadable(rawUrl *string) (string, string, error) {
+  client := &http.Client{}
+
 	urlUrl, err := url.Parse(*rawUrl)
 	if err != nil {
 		return "", "", err
 	}
 
-  resp, err := http.Get(*rawUrl)
+  req, err := http.NewRequest("GET", *rawUrl, nil)
+  if err != nil {
+    return "", "", err
+  }
+
+  req.Header.Set("User-Agent", "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html)")
+  req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+  req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+  req.Header.Set("DNT", "1")
+  req.Header.Set("Accept-Encoding", "deflate")
+
+  resp, err := client.Do(req)
   if err != nil {
     return "", "", err
   }
