@@ -33,7 +33,7 @@ any key in order to resume browsing.
 If you want to navigate through the page:
 
 ```
-reader $W3M_URL | less
+reader $W3M_URL | less -R
 ```
 
 ### Using `reader` from within `vim`/`neovim`
