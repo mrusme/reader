@@ -30,3 +30,9 @@ reader $W3M_URL
 This will open the current url with `reader`. `w3m` will wait for you to press
 any key in order to resume browsing.
 
+If you want to navigate through the page:
+
+```
+reader $W3M_URL | less
+```
+
