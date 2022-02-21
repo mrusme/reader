@@ -15,7 +15,9 @@ import (
 	"golang.org/x/crypto/ssh/terminal"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
+	// scraper "github.com/cardigann/go-cloudflare-scraper"
 	"github.com/spf13/cobra"
+	scraper "github.com/tinoquang/go-cloudflare-scraper"
 )
 
 var noImages bool
@@ -33,7 +35,8 @@ var mdImgPlaceholderRegex =
 
 
 func MakeReadable(rawUrl *string) (string, string, error) {
-  client := &http.Client{}
+  scraper, err := scraper.NewTransport(http.DefaultTransport)
+  client := &http.Client{Transport: scraper}
 
 	urlUrl, err := url.Parse(*rawUrl)
 	if err != nil {
@@ -46,8 +49,7 @@ func MakeReadable(rawUrl *string) (string, string, error) {
   }
 
   req.Header.Set("User-Agent",
-    "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; " +
-      "Googlebot/2.1; +http://www.google.com/bot.html)")
+    userAgent)
   req.Header.Set("Accept",
     "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif," +
       "image/webp,*/*;q=0.8")
