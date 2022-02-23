@@ -30,6 +30,11 @@ Output raw markdown, don't pretty print:
 reader -o https://xn--gckvb8fzb.com/superhighway84/
 ```
 
+More options:
+
+```sh
+reader -h
+```
 
 ## Examples
 
