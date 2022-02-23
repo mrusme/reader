@@ -21,6 +21,7 @@ import (
 )
 
 var noImages bool
+var noPretty bool
 var userAgent string
 
 type InlineImage struct {
@@ -182,6 +183,11 @@ var rootCmd = &cobra.Command{
       os.Exit(1)
     }
 
+    if noPretty == true {
+      fmt.Print(markdown)
+      os.Exit(0)
+    }
+
     output := markdown
     if noImages == false {
       output, err = RenderImg(&title, &markdown)
@@ -198,6 +204,13 @@ func Execute() {
     "i",
     false,
     "disable image rendering",
+  )
+  rootCmd.Flags().BoolVarP(
+    &noPretty,
+    "markdown-output",
+    "o",
+    false,
+    "disable pretty output, output raw markdown instead",
   )
   rootCmd.Flags().StringVarP(
     &userAgent,

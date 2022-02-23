@@ -18,7 +18,21 @@ images from that page as colored block-renders on the terminal as well.
 reader https://xn--gckvb8fzb.com/superhighway84/
 ```
 
+Don't render images:
+
+```sh
+reader -i https://xn--gckvb8fzb.com/superhighway84/
+```
+
+Output raw markdown, don't pretty print:
+
+```sh
+reader -o https://xn--gckvb8fzb.com/superhighway84/
+```
+
+
 ## Examples
+
 
 ### Using `reader` from within `w3m`
 
@@ -36,6 +50,7 @@ If you want to navigate through the page:
 ```
 reader $W3M_URL | less -R
 ```
+
 
 ### Using `reader` from within `vim`/`neovim`
 
