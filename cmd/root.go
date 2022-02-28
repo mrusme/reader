@@ -1,23 +1,23 @@
 package cmd
 
 import (
-	"fmt"
-	"image/color"
-	"net/http"
-	"net/url"
-	"os"
-	"regexp"
-	"strconv"
+  "fmt"
+  "image/color"
+  "net/http"
+  "net/url"
+  "os"
+  "regexp"
+  "strconv"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/eliukblau/pixterm/pkg/ansimage"
-	"github.com/go-shiori/go-readability"
-	"golang.org/x/crypto/ssh/terminal"
+  "github.com/charmbracelet/glamour"
+  "github.com/eliukblau/pixterm/pkg/ansimage"
+  "github.com/go-shiori/go-readability"
+  "golang.org/x/crypto/ssh/terminal"
 
-	md "github.com/JohannesKaufmann/html-to-markdown"
-	// scraper "github.com/cardigann/go-cloudflare-scraper"
-	"github.com/spf13/cobra"
-	scraper "github.com/tinoquang/go-cloudflare-scraper"
+  md "github.com/JohannesKaufmann/html-to-markdown"
+  // scraper "github.com/cardigann/go-cloudflare-scraper"
+  "github.com/spf13/cobra"
+  scraper "github.com/tinoquang/go-cloudflare-scraper"
 )
 
 var noImages bool
@@ -39,10 +39,10 @@ func MakeReadable(rawUrl *string) (string, string, error) {
   scraper, err := scraper.NewTransport(http.DefaultTransport)
   client := &http.Client{Transport: scraper}
 
-	urlUrl, err := url.Parse(*rawUrl)
-	if err != nil {
-		return "", "", err
-	}
+  urlUrl, err := url.Parse(*rawUrl)
+  if err != nil {
+    return "", "", err
+  }
 
   req, err := http.NewRequest("GET", *rawUrl, nil)
   if err != nil {
@@ -113,10 +113,10 @@ func RenderImg(title, md *string) (string, error) {
     return fmt.Sprintf("$$$%d$", inlineImageIndex)
   })
 
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(width),
-	)
+  renderer, _ := glamour.NewTermRenderer(
+    glamour.WithEnvironmentConfig(),
+    glamour.WithWordWrap(width),
+  )
 
 
   output, err :=
