@@ -4,6 +4,7 @@ import (
   "fmt"
   "image/color"
   "net/http"
+  "net/http/cookiejar"
   "net/url"
   "os"
   "regexp"
@@ -13,6 +14,7 @@ import (
   "github.com/eliukblau/pixterm/pkg/ansimage"
   "github.com/go-shiori/go-readability"
   "golang.org/x/crypto/ssh/terminal"
+  "golang.org/x/net/publicsuffix"
 
   md "github.com/JohannesKaufmann/html-to-markdown"
   // scraper "github.com/cardigann/go-cloudflare-scraper"
@@ -36,8 +38,16 @@ var mdImgPlaceholderRegex =
 
 
 func MakeReadable(rawUrl *string) (string, string, error) {
+  jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+  if err != nil {
+    return "", "", err
+  }
+
   scraper, err := scraper.NewTransport(http.DefaultTransport)
-  client := &http.Client{Transport: scraper}
+  client := &http.Client{
+    Jar: jar,
+    Transport: scraper,
+  }
 
   urlUrl, err := url.Parse(*rawUrl)
   if err != nil {
