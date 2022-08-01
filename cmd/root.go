@@ -68,8 +68,6 @@ func MakeReadable(rawUrl *string) (string, string, error) {
     "en-US,en;q=0.5")
   req.Header.Set("DNT",
     "1")
-  req.Header.Set("Accept-Encoding",
-    "deflate")
 
   resp, err := client.Do(req)
   if err != nil {
