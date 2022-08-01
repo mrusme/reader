@@ -1,6 +1,6 @@
 module github.com/mrusme/reader
 
-go 1.17
+go 1.18
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.3.5
@@ -10,6 +10,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/tinoquang/go-cloudflare-scraper v0.0.0-20200802120520-9158f3ffb9bf
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa
+	golang.org/x/net v0.0.0-20220728211354-c7608f3a8462
 )
 
 require (
@@ -37,7 +38,6 @@ require (
 	github.com/yuin/goldmark v1.4.13 // indirect
 	github.com/yuin/goldmark-emoji v1.0.1 // indirect
 	golang.org/x/image v0.0.0-20220722155232-062f8c9fd539 // indirect
-	golang.org/x/net v0.0.0-20220728211354-c7608f3a8462 // indirect
 	golang.org/x/sys v0.0.0-20220731174439-a90be440212d // indirect
 	golang.org/x/term v0.0.0-20220722155259-a9ba230a4035 // indirect
 	golang.org/x/text v0.3.7 // indirect
