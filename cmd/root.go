@@ -123,16 +123,11 @@ func getReaderFromStdin() (io.ReadCloser, error) {
   return io.NopCloser(bufio.NewReader(os.Stdin)), nil
 }
 
-func RenderImg(title, md *string) (string, error) {
+func RenderImg(md string) (string, []InlineImage, error) {
   var images []InlineImage
 
-  width, _, err := terminal.GetSize(0)
-  if err != nil {
-    width = 80
-  }
-
   markdown := mdImgRegex.
-    ReplaceAllStringFunc(*md, func(md string) (string) {
+    ReplaceAllStringFunc(md, func(md string) (string) {
     imgs := mdImgRegex.FindAllStringSubmatch(md, -1)
     if len(imgs) < 1 {
       return md
@@ -150,15 +145,23 @@ func RenderImg(title, md *string) (string, error) {
     return fmt.Sprintf("$$$%d$", inlineImageIndex)
   })
 
+  return markdown, images, nil
+}
+
+func RenderMarkdown(title, markdown string, images []InlineImage) (string, error) {
+  width, _, err := terminal.GetSize(0)
+  if err != nil {
+    width = 80
+  }
+
   renderer, _ := glamour.NewTermRenderer(
     glamour.WithEnvironmentConfig(),
     glamour.WithWordWrap(width),
   )
 
-
   output, err :=
     renderer.Render(
-      fmt.Sprintf("# %s\n\n%s", *title, markdown),
+      fmt.Sprintf("# %s\n\n%s", title, markdown),
     )
   if err != nil {
     output = fmt.Sprintf("%v", err)
@@ -222,14 +225,17 @@ var rootCmd = &cobra.Command{
 
     if noPretty == true {
       fmt.Print(markdown)
+      fmt.Println("")
       os.Exit(0)
     }
 
     output := markdown
+    var images []InlineImage
     if noImages == false {
-      output, err = RenderImg(&title, &markdown)
+      output, images, err = RenderImg(markdown)
     }
 
+    output, err = RenderMarkdown(title, output, images)
     fmt.Print(output)
   },
 }
