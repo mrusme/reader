@@ -1,26 +1,27 @@
 package cmd
 
 import (
-  "fmt"
-  "image/color"
-  "net/http"
-  "net/http/cookiejar"
-  "net/url"
-  "os"
-  "regexp"
-  "strconv"
-  "io"
+	"bufio"
+	"fmt"
+	"image/color"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
+	"os"
+	"regexp"
+	"strconv"
 
-  "github.com/charmbracelet/glamour"
-  "github.com/eliukblau/pixterm/pkg/ansimage"
-  "github.com/go-shiori/go-readability"
-  "golang.org/x/crypto/ssh/terminal"
-  "golang.org/x/net/publicsuffix"
+	"github.com/charmbracelet/glamour"
+	"github.com/eliukblau/pixterm/pkg/ansimage"
+	"github.com/go-shiori/go-readability"
+	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/net/publicsuffix"
 
-  md "github.com/JohannesKaufmann/html-to-markdown"
-  // scraper "github.com/cardigann/go-cloudflare-scraper"
-  "github.com/spf13/cobra"
-  scraper "github.com/tinoquang/go-cloudflare-scraper"
+	md "github.com/JohannesKaufmann/html-to-markdown"
+	// scraper "github.com/cardigann/go-cloudflare-scraper"
+	"github.com/spf13/cobra"
+	scraper "github.com/tinoquang/go-cloudflare-scraper"
 )
 
 var noImages bool
@@ -38,21 +39,26 @@ var mdImgPlaceholderRegex =
   regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
 
 func MakeReadable(rawUrl *string) (string, string, error) {
-
-  urlUrl, err := url.Parse(*rawUrl)
-  if err != nil {
-    return "", "", err
-  }
-
   var reader io.ReadCloser
-  switch(urlUrl.Scheme) {
-  case "http", "https":
-    reader, err = getReaderFromHTTP(rawUrl)
-  default:
-    reader, err = getReaderFromFile(rawUrl)
+  var urlUrl *url.URL
+  var err error
+
+  if *rawUrl == "-" {
+    reader, err = getReaderFromStdin()
+  } else {
+    urlUrl, err = url.Parse(*rawUrl)
+    if err != nil {
+      return "", "", err
+    }
+
+    switch(urlUrl.Scheme) {
+    case "http", "https":
+      reader, err = getReaderFromHTTP(rawUrl)
+    default:
+      reader, err = getReaderFromFile(rawUrl)
+    }
   }
   defer reader.Close()
-
 
   article, err := readability.FromReader(reader, urlUrl)
   if err != nil {
@@ -111,6 +117,10 @@ func HTMLtoMarkdown(html *string) (string, error) {
   }
 
   return markdown, nil
+}
+
+func getReaderFromStdin() (io.ReadCloser, error) {
+  return io.NopCloser(bufio.NewReader(os.Stdin)), nil
 }
 
 func RenderImg(title, md *string) (string, error) {
@@ -190,7 +200,7 @@ func RenderImg(title, md *string) (string, error) {
 }
 
 var rootCmd = &cobra.Command{
-  Use:   "reader <url/file>",
+  Use:   "reader <url/file/->",
   Short: "Reader is a command line web reader",
   Long: "A minimal command line reader offering better readability of web " +
           "pages on the CLI.",
