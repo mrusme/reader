@@ -9,6 +9,7 @@ import (
   "os"
   "regexp"
   "strconv"
+  "io"
 
   "github.com/charmbracelet/glamour"
   "github.com/eliukblau/pixterm/pkg/ansimage"
@@ -36,11 +37,35 @@ var mdImgRegex =
 var mdImgPlaceholderRegex =
   regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
 
-
 func MakeReadable(rawUrl *string) (string, string, error) {
-  jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+
+  urlUrl, err := url.Parse(*rawUrl)
   if err != nil {
     return "", "", err
+  }
+
+  var reader io.ReadCloser
+  switch(urlUrl.Scheme) {
+  case "http", "https":
+    reader, err = getReaderFromHTTP(rawUrl)
+  default:
+    reader, err = getReaderFromFile(rawUrl)
+  }
+  defer reader.Close()
+
+
+  article, err := readability.FromReader(reader, urlUrl)
+  if err != nil {
+    return "", "", err
+  }
+
+  return article.Title, article.Content, nil
+}
+
+func getReaderFromHTTP(rawUrl *string) (io.ReadCloser, error) {
+  jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+  if err != nil {
+    return nil, err
   }
 
   scraper, err := scraper.NewTransport(http.DefaultTransport)
@@ -49,14 +74,9 @@ func MakeReadable(rawUrl *string) (string, string, error) {
     Transport: scraper,
   }
 
-  urlUrl, err := url.Parse(*rawUrl)
-  if err != nil {
-    return "", "", err
-  }
-
   req, err := http.NewRequest("GET", *rawUrl, nil)
   if err != nil {
-    return "", "", err
+    return nil, err
   }
 
   req.Header.Set("User-Agent",
@@ -71,16 +91,15 @@ func MakeReadable(rawUrl *string) (string, string, error) {
 
   resp, err := client.Do(req)
   if err != nil {
-    return "", "", err
+    return nil, err
   }
-  defer resp.Body.Close()
+  // defer resp.Body.Close()
 
-  article, err := readability.FromReader(resp.Body, urlUrl)
-  if err != nil {
-    return "", "", err
-  }
+  return resp.Body, nil
+}
 
-  return article.Title, article.Content, nil
+func getReaderFromFile(rawUrl *string) (io.ReadCloser, error) {
+  return os.Open(*rawUrl)
 }
 
 func HTMLtoMarkdown(html *string) (string, error) {
@@ -171,7 +190,7 @@ func RenderImg(title, md *string) (string, error) {
 }
 
 var rootCmd = &cobra.Command{
-  Use:   "reader <url>",
+  Use:   "reader <url/file>",
   Short: "Reader is a command line web reader",
   Long: "A minimal command line reader offering better readability of web " +
           "pages on the CLI.",
