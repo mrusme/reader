@@ -30,6 +30,18 @@ Output raw markdown, don't pretty print:
 reader -o https://xn--gckvb8fzb.com/superhighway84/
 ```
 
+Read from file:
+
+```sh
+reader reader ${HOME}/downloads/example.com.html
+```
+
+Read from stdin:
+
+```sh
+curl -o - https://superhighway84.com | reader -
+```
+
 More options:
 
 ```sh
