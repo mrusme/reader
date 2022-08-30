@@ -1,29 +1,24 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"image/color"
-	"io"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/eliukblau/pixterm/pkg/ansimage"
-	"github.com/go-shiori/go-readability"
-	"golang.org/x/crypto/ssh/terminal"
-	"golang.org/x/net/publicsuffix"
 
+  "golang.org/x/crypto/ssh/terminal"
 	md "github.com/JohannesKaufmann/html-to-markdown"
-	// scraper "github.com/cardigann/go-cloudflare-scraper"
 	"github.com/spf13/cobra"
-	scraper "github.com/tinoquang/go-cloudflare-scraper"
+
+  "github.com/mrusme/journalist/crawler"
+  "go.uber.org/zap"
 )
 
+var verbose bool
 var noImages bool
 var noPretty bool
 var userAgent string
@@ -38,74 +33,16 @@ var mdImgRegex =
 var mdImgPlaceholderRegex =
   regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
 
-func MakeReadable(rawUrl *string) (string, string, error) {
-  var reader io.ReadCloser
-  var urlUrl *url.URL
-  var err error
+func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
+  var crwlr *crawler.Crawler = crawler.New(logger)
 
-  if *rawUrl == "-" {
-    reader, err = getReaderFromStdin()
-  } else {
-    urlUrl, err = url.Parse(*rawUrl)
-    if err != nil {
-      return "", "", err
-    }
-
-    switch(urlUrl.Scheme) {
-    case "http", "https":
-      reader, err = getReaderFromHTTP(rawUrl)
-    default:
-      reader, err = getReaderFromFile(rawUrl)
-    }
-  }
-  defer reader.Close()
-
-  article, err := readability.FromReader(reader, urlUrl)
+  crwlr.SetLocation(*rawUrl)
+  article, err := crwlr.GetReadable()
   if err != nil {
     return "", "", err
   }
 
-  return article.Title, article.Content, nil
-}
-
-func getReaderFromHTTP(rawUrl *string) (io.ReadCloser, error) {
-  jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
-  if err != nil {
-    return nil, err
-  }
-
-  scraper, err := scraper.NewTransport(http.DefaultTransport)
-  client := &http.Client{
-    Jar: jar,
-    Transport: scraper,
-  }
-
-  req, err := http.NewRequest("GET", *rawUrl, nil)
-  if err != nil {
-    return nil, err
-  }
-
-  req.Header.Set("User-Agent",
-    userAgent)
-  req.Header.Set("Accept",
-    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif," +
-      "image/webp,*/*;q=0.8")
-  req.Header.Set("Accept-Language",
-    "en-US,en;q=0.5")
-  req.Header.Set("DNT",
-    "1")
-
-  resp, err := client.Do(req)
-  if err != nil {
-    return nil, err
-  }
-  // defer resp.Body.Close()
-
-  return resp.Body, nil
-}
-
-func getReaderFromFile(rawUrl *string) (io.ReadCloser, error) {
-  return os.Open(*rawUrl)
+  return article.Title, article.ContentHtml, nil
 }
 
 func HTMLtoMarkdown(html *string) (string, error) {
@@ -117,10 +54,6 @@ func HTMLtoMarkdown(html *string) (string, error) {
   }
 
   return markdown, nil
-}
-
-func getReaderFromStdin() (io.ReadCloser, error) {
-  return io.NopCloser(bufio.NewReader(os.Stdin)), nil
 }
 
 func RenderImg(md string) (string, []InlineImage, error) {
@@ -209,9 +142,18 @@ var rootCmd = &cobra.Command{
           "pages on the CLI.",
   Args: cobra.MinimumNArgs(1),
   Run: func(cmd *cobra.Command, args []string) {
+    var logger *zap.Logger
+
+    if verbose == true {
+      logger, _ = zap.NewDevelopment()
+    } else {
+      logger, _ = zap.NewProduction()
+    }
+    defer logger.Sync()
+
     rawUrl := args[0]
 
-    title, content, err := MakeReadable(&rawUrl)
+    title, content, err := MakeReadable(&rawUrl, logger)
     if err != nil {
       fmt.Fprintln(os.Stderr, err)
       os.Exit(1)
@@ -262,6 +204,13 @@ func Execute() {
     "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; " +
       "Googlebot/2.1; +http://www.google.com/bot.html)",
     "set custom user agent string",
+  )
+  rootCmd.Flags().BoolVarP(
+    &verbose,
+    "verbose",
+    "v",
+    false,
+    "verbose output",
   )
 
   if err := rootCmd.Execute(); err != nil {
