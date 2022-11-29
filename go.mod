@@ -6,10 +6,10 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.3.6
 	github.com/charmbracelet/glamour v0.6.0
 	github.com/eliukblau/pixterm v1.3.1
-	github.com/mrusme/journalist v1.0.1-0.20220830190010-0f512be110d3
+	github.com/mrusme/journalist v1.0.1-0.20221129032231-3e53324ca29d
 	github.com/spf13/cobra v1.6.1
 	go.uber.org/zap v1.23.0
-	golang.org/x/crypto v0.2.0
+	golang.org/x/crypto v0.3.0
 )
 
 require (
@@ -43,8 +43,8 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.13.0 // indirect
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
-	github.com/rivo/uniseg v0.4.2 // indirect
-	github.com/robertkrimen/otto v0.0.0-20221025135307-511d75fba9f8 // indirect
+	github.com/rivo/uniseg v0.4.3 // indirect
+	github.com/robertkrimen/otto v0.0.0-20221129000910-8d121dcad17a // indirect
 	github.com/sirupsen/logrus v1.9.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/tinoquang/go-cloudflare-scraper v0.0.0-20200802120520-9158f3ffb9bf // indirect
@@ -60,4 +60,4 @@ require (
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 )
 
-replace github.com/mrusme/journalist => ../journalist
+// replace github.com/mrusme/journalist => ../journalist
