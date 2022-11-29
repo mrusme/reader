@@ -34,7 +34,7 @@ func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
 	var crwlr *crawler.Crawler = crawler.New(logger)
 
 	crwlr.SetLocation(*rawUrl)
-	article, err := crwlr.GetReadable()
+	article, err := crwlr.GetReadable(true)
 	if err != nil {
 		return "", "", err
 	}
