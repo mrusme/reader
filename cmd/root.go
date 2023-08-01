@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"encoding/base64"
 	"fmt"
 	"image/color"
+	"io/ioutil"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
@@ -19,6 +22,7 @@ import (
 )
 
 var verbose bool
+var inlineImagesProtocol bool
 var noImages bool
 var noPretty bool
 
@@ -113,19 +117,35 @@ func RenderMarkdown(title, markdown string, images []InlineImage) (string, error
 				imgTitle := images[imgIndex].Title
 				imgURL := images[imgIndex].URL
 
-				pix, err := ansimage.NewScaledFromURL(
-					imgURL,
-					int((float64(width) * 0.75)),
-					width,
-					color.Transparent,
-					ansimage.ScaleModeResize,
-					ansimage.NoDithering,
-				)
-				if err != nil {
-					return md
-				}
+				if inlineImagesProtocol == true {
+					res, err := http.Get(imgURL)
+					if err != nil {
+						return md
+					}
 
-				return fmt.Sprintf("\n%s\n  %s", pix.RenderExt(false, false), imgTitle)
+					defer res.Body.Close()
+
+					data, err := ioutil.ReadAll(res.Body)
+					if err != nil {
+						return md
+					}
+
+					return fmt.Sprintf("\033]1337;File=inline=1:%s\007", base64.StdEncoding.EncodeToString(data))
+				} else {
+					pix, err := ansimage.NewScaledFromURL(
+						imgURL,
+						int((float64(width) * 0.75)),
+						width,
+						color.Transparent,
+						ansimage.ScaleModeResize,
+						ansimage.NoDithering,
+					)
+					if err != nil {
+						return md
+					}
+
+					return fmt.Sprintf("\n%s\n  %s", pix.RenderExt(false, false), imgTitle)
+				}
 			})
 	}
 
@@ -180,6 +200,13 @@ var rootCmd = &cobra.Command{
 }
 
 func Execute() {
+	rootCmd.Flags().BoolVarP(
+		&inlineImagesProtocol,
+		"inline-images-protocol",
+		"t",
+		false,
+		"use iTerm2 inline images protocol ",
+	)
 	rootCmd.Flags().BoolVarP(
 		&noImages,
 		"no-images",
