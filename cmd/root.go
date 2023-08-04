@@ -1,14 +1,22 @@
 package cmd
 
 import (
+	"bytes"
 	"fmt"
+	"image"
 	"image/color"
+	"net/http"
 	"os"
 	"regexp"
 	"strconv"
 
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+
 	"github.com/charmbracelet/glamour"
 	"github.com/eliukblau/pixterm/pkg/ansimage"
+	"github.com/mattn/go-sixel"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/spf13/cobra"
@@ -21,6 +29,7 @@ import (
 var verbose bool
 var noImages bool
 var noPretty bool
+var sixelEncoder bool
 
 type InlineImage struct {
 	URL   string
@@ -113,6 +122,30 @@ func RenderMarkdown(title, markdown string, images []InlineImage) (string, error
 				imgTitle := images[imgIndex].Title
 				imgURL := images[imgIndex].URL
 
+				if sixelEncoder == true {
+					res, err := http.Get(imgURL)
+					if err != nil {
+						return md
+					}
+
+					defer res.Body.Close()
+
+					im, _, err := image.Decode(res.Body)
+					if err != nil {
+						return md
+					}
+
+					var b bytes.Buffer
+					enc := sixel.NewEncoder(&b)
+					enc.Dither = true
+					err = enc.Encode(im)
+					if err != nil {
+						return md
+					}
+
+					return fmt.Sprintf("\n%s\n  %s", string(b.Bytes()), imgTitle)
+				}
+
 				pix, err := ansimage.NewScaledFromURL(
 					imgURL,
 					int((float64(width) * 0.75)),
@@ -181,11 +214,11 @@ var rootCmd = &cobra.Command{
 
 func Execute() {
 	rootCmd.Flags().BoolVarP(
-		&noImages,
-		"no-images",
-		"i",
+		&sixelEncoder,
+		"sixel-encoder",
+		"s",
 		false,
-		"disable image rendering",
+		"use sixel graphics encoder",
 	)
 	rootCmd.Flags().BoolVarP(
 		&noPretty,
@@ -193,6 +226,13 @@ func Execute() {
 		"o",
 		false,
 		"disable pretty output, output raw markdown instead",
+	)
+	rootCmd.Flags().BoolVarP(
+		&noImages,
+		"no-images",
+		"i",
+		false,
+		"disable image rendering",
 	)
 	rootCmd.Flags().BoolVarP(
 		&verbose,
