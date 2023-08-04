@@ -218,7 +218,7 @@ func Execute() {
 		"sixel-encoder",
 		"s",
 		false,
-		"use drcs sixel encoder",
+		"use sixel graphics encoder",
 	)
 	rootCmd.Flags().BoolVarP(
 		&noPretty,
