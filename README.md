@@ -42,6 +42,14 @@ Read from stdin:
 curl -o - https://superhighway84.com | reader -
 ```
 
+Render images using the SIXEL graphics encoder:
+
+```sh
+reader -s https://xn--gckvb8fzb.com/travel-aruba/
+```
+
+![sixel](sixel.png)
+
 More options:
 
 ```sh
