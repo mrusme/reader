@@ -203,7 +203,7 @@ var rootCmd = &cobra.Command{
 	Use:   "reader <url/file/->",
 	Short: "Reader is a command line web reader",
 	Long: "A minimal command line reader offering better readability of web " +
-		"pages on the CLI. [https://github.com/mrusme]",
+		"pages on the CLI. [https://github.com/mrusme/reader]",
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var logger *zap.Logger
@@ -285,7 +285,7 @@ func Execute() {
 	rootCmd.Flags().StringVarP(
 		&imageMode,
 		"image-mode",
-		"m",
+		"i",
 		"ansi",
 		"image mode (" + strings.Join( validImageModes, "/") + ")",
 	)
