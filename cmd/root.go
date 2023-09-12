@@ -34,7 +34,6 @@ import (
 var (
 	verbose bool
 	noPretty bool
-	sixelEncoder bool
 	imageMode string
 	terminalWidth int
 	validImageModes = []string{"none", "ansi", "ansi-dither", "kitty", "sixel"}
@@ -52,7 +51,7 @@ func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
 	var crwlr *crawler.Crawler = crawler.New(logger)
 
 	crwlr.SetLocation(*rawUrl)
-	article, err := crwlr.GetReadable()
+	article, err := crwlr.GetReadable(true)
 	if err != nil {
 		return "", "", err
 	}
