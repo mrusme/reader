@@ -7,18 +7,23 @@ import (
 	"image/color"
 	"net/http"
 	"os"
+	"io"
 	"regexp"
 	"strconv"
+	"strings"
 
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	_ "golang.org/x/image/webp"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/eliukblau/pixterm/pkg/ansimage"
 	"github.com/mattn/go-sixel"
+	"github.com/dolmen-go/kittyimg"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
+	mdplug "github.com/JohannesKaufmann/html-to-markdown/plugin"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 
@@ -26,10 +31,13 @@ import (
 	"go.uber.org/zap"
 )
 
-var verbose bool
-var noImages bool
-var noPretty bool
-var sixelEncoder bool
+var (
+	verbose bool
+	noPretty bool
+	imageMode string
+	terminalWidth int
+	validImageModes = []string{"none", "ansi", "ansi-dither", "kitty", "sixel"}
+)
 
 type InlineImage struct {
 	URL   string
@@ -53,6 +61,7 @@ func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
 
 func HTMLtoMarkdown(html *string) (string, error) {
 	converter := md.NewConverter("", true, nil)
+	converter.Use( mdplug.GitHubFlavored())
 
 	markdown, err := converter.ConvertString(*html)
 	if err != nil {
@@ -87,11 +96,47 @@ func RenderImg(md string) (string, []InlineImage, error) {
 	return markdown, images, nil
 }
 
-func RenderMarkdown(title, markdown string, images []InlineImage) (string, error) {
-	width, _, err := terminal.GetSize(0)
-	if err != nil {
-		width = 80
+func renderImage( img image.Image, imgTitle string, mode string, width int) (string, error) {
+
+	switch mode {
+		case "sixel":
+		var b bytes.Buffer
+		enc := sixel.NewEncoder(&b)
+		enc.Dither = true
+		err := enc.Encode(img)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("\n%s\n  %s", string(b.Bytes()), imgTitle), nil
+
+		case "ansi", "ansi-dither":
+		dm := ansimage.NoDithering
+		if mode == "ansi-dither" {
+			dm = ansimage.DitheringWithBlocks
+		}
+		pix, err := ansimage.NewScaledFromImage(
+			img,
+			int((float64(width) * 0.75)),
+			width,
+			color.Transparent,
+			ansimage.ScaleModeResize,
+			dm,
+		)
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("\n%s\n  %s", pix.RenderExt(false, false), imgTitle), nil
+
+		case "kitty":
+		buf := new( bytes.Buffer)
+		kittyimg.Fprintln( buf, img)
+		return string( buf.Bytes()), nil
 	}
+	return "", fmt.Errorf("invalid mode")
+}
+
+
+func RenderMarkdown(title, markdown string, images []InlineImage, width int) (string, error) {
 
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
@@ -105,6 +150,7 @@ func RenderMarkdown(title, markdown string, images []InlineImage) (string, error
 	if err != nil {
 		output = fmt.Sprintf("%v", err)
 	} else {
+		hc := new( http.Client)
 		output = mdImgPlaceholderRegex.
 			ReplaceAllStringFunc(output, func(md string) string {
 				imgs := mdImgPlaceholderRegex.FindAllStringSubmatch(md, -1)
@@ -122,43 +168,30 @@ func RenderMarkdown(title, markdown string, images []InlineImage) (string, error
 				imgTitle := images[imgIndex].Title
 				imgURL := images[imgIndex].URL
 
-				if sixelEncoder == true {
-					res, err := http.Get(imgURL)
-					if err != nil {
-						return md
-					}
-
-					defer res.Body.Close()
-
-					im, _, err := image.Decode(res.Body)
-					if err != nil {
-						return md
-					}
-
-					var b bytes.Buffer
-					enc := sixel.NewEncoder(&b)
-					enc.Dither = true
-					err = enc.Encode(im)
-					if err != nil {
-						return md
-					}
-
-					return fmt.Sprintf("\n%s\n  %s", string(b.Bytes()), imgTitle)
-				}
-
-				pix, err := ansimage.NewScaledFromURL(
-					imgURL,
-					int((float64(width) * 0.75)),
-					width,
-					color.Transparent,
-					ansimage.ScaleModeResize,
-					ansimage.NoDithering,
-				)
+				res, err := hc.Get(imgURL)
 				if err != nil {
 					return md
 				}
 
-				return fmt.Sprintf("\n%s\n  %s", pix.RenderExt(false, false), imgTitle)
+				defer res.Body.Close()
+				if res.StatusCode != http.StatusOK {
+					return md
+				}
+				buf := new( bytes.Buffer)
+				if _, err := io.Copy( buf, res.Body); err != nil {
+					return md
+				}
+
+				im, _, err := image.Decode( bytes.NewReader( buf.Bytes()))
+				if err != nil {
+					return md
+				}
+
+				if ir, err := renderImage( im, imgTitle, imageMode, width); err == nil {
+					return ir
+				} else {
+					return md
+				}
 			})
 	}
 
@@ -169,7 +202,7 @@ var rootCmd = &cobra.Command{
 	Use:   "reader <url/file/->",
 	Short: "Reader is a command line web reader",
 	Long: "A minimal command line reader offering better readability of web " +
-		"pages on the CLI.",
+		"pages on the CLI. [https://github.com/mrusme/reader]",
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var logger *zap.Logger
@@ -182,6 +215,27 @@ var rootCmd = &cobra.Command{
 		defer logger.Sync()
 
 		rawUrl := args[0]
+
+		imValid := false
+		for _, m := range validImageModes {
+			if m == imageMode {
+				imValid = true
+				break
+			}
+		}
+		if !imValid {
+			fmt.Fprintf(os.Stderr, "invalid image mode: %s\n", imageMode)
+			os.Exit(1)
+		}
+
+		if terminalWidth == 0 {
+			tw, _, err := terminal.GetSize(0)
+			if err != nil {
+				terminalWidth = 80
+			} else {
+				terminalWidth = tw
+			}
+		}
 
 		title, content, err := MakeReadable(&rawUrl, logger)
 		if err != nil {
@@ -203,23 +257,16 @@ var rootCmd = &cobra.Command{
 
 		output := markdown
 		var images []InlineImage
-		if noImages == false {
+		if imageMode != "none" {
 			output, images, err = RenderImg(markdown)
 		}
 
-		output, err = RenderMarkdown(title, output, images)
+		output, err = RenderMarkdown(title, output, images, terminalWidth)
 		fmt.Print(output)
 	},
 }
 
 func Execute() {
-	rootCmd.Flags().BoolVarP(
-		&sixelEncoder,
-		"sixel-encoder",
-		"s",
-		false,
-		"use sixel graphics encoder",
-	)
 	rootCmd.Flags().BoolVarP(
 		&noPretty,
 		"markdown-output",
@@ -228,18 +275,25 @@ func Execute() {
 		"disable pretty output, output raw markdown instead",
 	)
 	rootCmd.Flags().BoolVarP(
-		&noImages,
-		"no-images",
-		"i",
-		false,
-		"disable image rendering",
-	)
-	rootCmd.Flags().BoolVarP(
 		&verbose,
 		"verbose",
 		"v",
 		false,
 		"verbose output",
+	)
+	rootCmd.Flags().StringVarP(
+		&imageMode,
+		"image-mode",
+		"i",
+		"ansi",
+		"image mode (" + strings.Join( validImageModes, "/") + ")",
+	)
+	rootCmd.Flags().IntVarP(
+		&terminalWidth,
+		"terminal-width",
+		"w",
+		0,
+		"terminal width (0=auto)",
 	)
 
 	if err := rootCmd.Execute(); err != nil {

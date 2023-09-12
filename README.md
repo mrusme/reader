@@ -21,7 +21,7 @@ reader https://xn--gckvb8fzb.com/superhighway84/
 Don't render images:
 
 ```sh
-reader -i https://xn--gckvb8fzb.com/superhighway84/
+reader --image-mode none https://xn--gckvb8fzb.com/superhighway84/
 ```
 
 Output raw markdown, don't pretty print:
@@ -33,7 +33,7 @@ reader -o https://xn--gckvb8fzb.com/superhighway84/
 Read from file:
 
 ```sh
-reader reader ${HOME}/downloads/example.com.html
+reader ${HOME}/downloads/example.com.html
 ```
 
 Read from stdin:
@@ -45,7 +45,7 @@ curl -o - https://superhighway84.com | reader -
 Render images using the SIXEL graphics encoder:
 
 ```sh
-reader -s https://xn--gckvb8fzb.com/travel-aruba/
+reader --image-mode sixel https://xn--gckvb8fzb.com/travel-aruba/
 ```
 
 ![sixel](sixel.png)
