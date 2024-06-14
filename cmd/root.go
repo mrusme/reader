@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"io"
 	"net/http"
 	"os"
-	"io"
 	"regexp"
 	"strconv"
 	"strings"
@@ -15,12 +15,13 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+
 	_ "golang.org/x/image/webp"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/dolmen-go/kittyimg"
 	"github.com/eliukblau/pixterm/pkg/ansimage"
 	"github.com/mattn/go-sixel"
-	"github.com/dolmen-go/kittyimg"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	mdplug "github.com/JohannesKaufmann/html-to-markdown/plugin"
@@ -32,10 +33,10 @@ import (
 )
 
 var (
-	verbose bool
-	noPretty bool
-	imageMode string
-	terminalWidth int
+	verbose         bool
+	noPretty        bool
+	imageMode       string
+	terminalWidth   int
 	validImageModes = []string{"none", "ansi", "ansi-dither", "kitty", "sixel"}
 )
 
@@ -61,7 +62,7 @@ func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
 
 func HTMLtoMarkdown(html *string) (string, error) {
 	converter := md.NewConverter("", true, nil)
-	converter.Use( mdplug.GitHubFlavored())
+	converter.Use(mdplug.GitHubFlavored())
 
 	markdown, err := converter.ConvertString(*html)
 	if err != nil {
@@ -96,10 +97,10 @@ func RenderImg(md string) (string, []InlineImage, error) {
 	return markdown, images, nil
 }
 
-func renderImage( img image.Image, imgTitle string, mode string, width int) (string, error) {
+func renderImage(img image.Image, imgTitle string, mode string, width int) (string, error) {
 
 	switch mode {
-		case "sixel":
+	case "sixel":
 		var b bytes.Buffer
 		enc := sixel.NewEncoder(&b)
 		enc.Dither = true
@@ -109,7 +110,7 @@ func renderImage( img image.Image, imgTitle string, mode string, width int) (str
 		}
 		return fmt.Sprintf("\n%s\n  %s", string(b.Bytes()), imgTitle), nil
 
-		case "ansi", "ansi-dither":
+	case "ansi", "ansi-dither":
 		dm := ansimage.NoDithering
 		if mode == "ansi-dither" {
 			dm = ansimage.DitheringWithBlocks
@@ -127,14 +128,13 @@ func renderImage( img image.Image, imgTitle string, mode string, width int) (str
 		}
 		return fmt.Sprintf("\n%s\n  %s", pix.RenderExt(false, false), imgTitle), nil
 
-		case "kitty":
-		buf := new( bytes.Buffer)
-		kittyimg.Fprintln( buf, img)
-		return string( buf.Bytes()), nil
+	case "kitty":
+		buf := new(bytes.Buffer)
+		kittyimg.Fprintln(buf, img)
+		return string(buf.Bytes()), nil
 	}
 	return "", fmt.Errorf("invalid mode")
 }
-
 
 func RenderMarkdown(title, markdown string, images []InlineImage, width int) (string, error) {
 
@@ -150,7 +150,7 @@ func RenderMarkdown(title, markdown string, images []InlineImage, width int) (st
 	if err != nil {
 		output = fmt.Sprintf("%v", err)
 	} else {
-		hc := new( http.Client)
+		hc := new(http.Client)
 		output = mdImgPlaceholderRegex.
 			ReplaceAllStringFunc(output, func(md string) string {
 				imgs := mdImgPlaceholderRegex.FindAllStringSubmatch(md, -1)
@@ -177,17 +177,17 @@ func RenderMarkdown(title, markdown string, images []InlineImage, width int) (st
 				if res.StatusCode != http.StatusOK {
 					return md
 				}
-				buf := new( bytes.Buffer)
-				if _, err := io.Copy( buf, res.Body); err != nil {
+				buf := new(bytes.Buffer)
+				if _, err := io.Copy(buf, res.Body); err != nil {
 					return md
 				}
 
-				im, _, err := image.Decode( bytes.NewReader( buf.Bytes()))
+				im, _, err := image.Decode(bytes.NewReader(buf.Bytes()))
 				if err != nil {
 					return md
 				}
 
-				if ir, err := renderImage( im, imgTitle, imageMode, width); err == nil {
+				if ir, err := renderImage(im, imgTitle, imageMode, width); err == nil {
 					return ir
 				} else {
 					return md
@@ -250,6 +250,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		if noPretty == true {
+			fmt.Printf("# %s\n\n", title)
 			fmt.Print(markdown)
 			fmt.Println("")
 			os.Exit(0)
@@ -286,7 +287,7 @@ func Execute() {
 		"image-mode",
 		"i",
 		"ansi",
-		"image mode (" + strings.Join( validImageModes, "/") + ")",
+		"image mode ("+strings.Join(validImageModes, "/")+")",
 	)
 	rootCmd.Flags().IntVarP(
 		&terminalWidth,
