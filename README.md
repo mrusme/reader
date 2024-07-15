@@ -94,3 +94,10 @@ nmap gx <Plug>vertopen_url
 Open a document and place the cursor on a link, then press `g` followed by `x`.
 Vim will open a new terminal and show you the output of `reader`.
 
+
+### Installation 
+```
+git clone https://github.com/AbeEstrada/reader.git
+cd reader
+go install 
+```
