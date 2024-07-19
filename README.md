@@ -11,6 +11,17 @@ CLI.
 highlighted text on the command line. In addition, `reader` renders embedded
 images from that page as colored block-renders on the terminal as well.
 
+### Installation 
+```
+go install github.com/mrusme/reader@latest
+```
+If the above fails, then the following should work :
+
+```
+git clone https://github.com/mrusme/reader.git
+cd reader
+go install 
+```
 
 ## Usage
 
@@ -93,4 +104,6 @@ nmap gx <Plug>vertopen_url
 
 Open a document and place the cursor on a link, then press `g` followed by `x`.
 Vim will open a new terminal and show you the output of `reader`.
+
+
 
