@@ -35,6 +35,7 @@ import (
 var (
 	verbose         bool
 	noPretty        bool
+	noReadability   bool
 	imageMode       string
 	terminalWidth   int
 	validImageModes = []string{"none", "ansi", "ansi-dither", "kitty", "sixel"}
@@ -52,6 +53,17 @@ func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
 	var crwlr *crawler.Crawler = crawler.New(logger)
 
 	crwlr.SetLocation(*rawUrl)
+
+	if noReadability == true {
+		if err := crwlr.FromAuto(true); err != nil {
+			return "", "", err
+		}
+
+		buf := new(bytes.Buffer)
+		buf.ReadFrom(crwlr.GetSource())
+		return "", string(buf.String()), nil
+	}
+
 	article, err := crwlr.GetReadable(true)
 	if err != nil {
 		return "", "", err
@@ -274,6 +286,13 @@ func Execute() {
 		"o",
 		false,
 		"disable pretty output, output raw markdown instead",
+	)
+	rootCmd.Flags().BoolVarP(
+		&noReadability,
+		"no-readability",
+		"r",
+		false,
+		"disable making the HTML content readable",
 	)
 	rootCmd.Flags().BoolVarP(
 		&verbose,
