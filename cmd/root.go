@@ -36,6 +36,7 @@ var (
 	verbose         bool
 	noPretty        bool
 	noReadability   bool
+	noCycleTLS      bool
 	imageMode       string
 	terminalWidth   int
 	validImageModes = []string{"none", "ansi", "ansi-dither", "kitty", "sixel"}
@@ -49,7 +50,7 @@ type InlineImage struct {
 var mdImgRegex = regexp.MustCompile(`(?m)\[{0,1}!\[(:?\]\(.*\)){0,1}(.*)\]\((.+)\)`)
 var mdImgPlaceholderRegex = regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
 
-func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
+func MakeReadable(rawUrl *string, logger *zap.Logger, cycleTLS bool) (string, string, error) {
 	var crwlr *crawler.Crawler = crawler.New(logger)
 
 	crwlr.SetLocation(*rawUrl)
@@ -64,7 +65,7 @@ func MakeReadable(rawUrl *string, logger *zap.Logger) (string, string, error) {
 		return "", string(buf.String()), nil
 	}
 
-	article, err := crwlr.GetReadable(true)
+	article, err := crwlr.GetReadable(cycleTLS)
 	if err != nil {
 		return "", "", err
 	}
@@ -249,7 +250,7 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
-		title, content, err := MakeReadable(&rawUrl, logger)
+		title, content, err := MakeReadable(&rawUrl, logger, !noCycleTLS)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
@@ -293,6 +294,12 @@ func Execute() {
 		"r",
 		false,
 		"disable making the HTML content readable",
+	)
+	rootCmd.Flags().BoolVar(
+		&noCycleTLS,
+		"no-cycletls",
+		false,
+		"disable use of CycleTLS",
 	)
 	rootCmd.Flags().BoolVarP(
 		&verbose,
