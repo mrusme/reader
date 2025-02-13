@@ -12,10 +12,6 @@ max_line = 80
 [*.{md,markdown}]
 trim_trailing_whitespace = false
 
-[*.go]
-indent_style = tab
-indent_size = 2
-
 [{Makefile,Makefile.*}]
 indent_style = tab
 indent_size = 2
