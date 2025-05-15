@@ -77,6 +77,34 @@ Output EML file raw:
 reader --eml --raw my-email-file.eml
 ```
 
+Parse an attribute out of a series of `*.eml` files using
+[pup](https://github.com/ericchiang/pup):
+
+```sh
+$ /bin/ls -1 ./*@mail.uber.com.eml \
+  | while read mail; do reader --raw --eml "$mail" \
+    | pup 'td.Uber18_text_p1 span.Uber18_text_p2 text{}'; done
+$3.80
+$13.72
+$17.90
+$5.87
+$15.90
+$24.40
+$23.00
+$35.00
+$27.19
+$4.54
+$5.07
+$8.54
+$2.60
+$19.81
+$25.61
+$30.00
+€5.90
+$4.68
+...
+```
+
 More options:
 
 ```sh
