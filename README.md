@@ -105,6 +105,16 @@ $4.68
 ...
 ```
 
+So let's say you want a `|` delimited CSV with all your Uber payments (based on 
+the mails you received from Uber) you could do:
+
+```sh
+/bin/ls -1 ./*@mail.uber.com.eml \
+  | while read mail; do reader --raw --eml "$mail" \
+    | pup 'span.Uber18_text_p2, span.Uber18_text_p1 json{}' \
+    | jq -r '"| \(.[1].text) | \(.[0].text) |"'; done > ./uber.csv
+```
+
 More options:
 
 ```sh
