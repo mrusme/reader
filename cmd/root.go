@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -25,6 +26,7 @@ import (
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	mdplug "github.com/JohannesKaufmann/html-to-markdown/plugin"
+	"github.com/emersion/go-message"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 
@@ -37,6 +39,8 @@ var (
 	noPretty        bool
 	noReadability   bool
 	noCycleTLS      bool
+	isEML           bool
+	rawOut          bool
 	imageMode       string
 	terminalWidth   int
 	validImageModes = []string{"none", "ansi", "ansi-dither", "kitty", "sixel"}
@@ -47,8 +51,10 @@ type InlineImage struct {
 	Title string
 }
 
-var mdImgRegex = regexp.MustCompile(`(?m)\[{0,1}!\[(:?\]\(.*\)){0,1}(.*)\]\((.+)\)`)
-var mdImgPlaceholderRegex = regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
+var (
+	mdImgRegex            = regexp.MustCompile(`(?m)\[{0,1}!\[(:?\]\(.*\)){0,1}(.*)\]\((.+)\)`)
+	mdImgPlaceholderRegex = regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
+)
 
 func MakeReadable(rawUrl *string, logger *zap.Logger, cycleTLS bool) (string, string, error) {
 	var crwlr *crawler.Crawler = crawler.New(logger)
@@ -73,7 +79,93 @@ func MakeReadable(rawUrl *string, logger *zap.Logger, cycleTLS bool) (string, st
 	return article.Title, article.ContentHtml, nil
 }
 
-func HTMLtoMarkdown(html *string) (string, error) {
+func ioReaderToString(r io.Reader) (string, error) {
+	buf := make([]byte, 8)
+	var text strings.Builder
+
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			text.Write(buf[:n])
+		}
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			return "", err
+		}
+	}
+
+	return text.String(), nil
+}
+
+func EMLToMarkdown(eml *string, rawOutput bool) (string, error) {
+	m, err := message.Read(strings.NewReader(*eml))
+	if message.IsUnknownCharset(err) {
+		// TODO
+	} else if err != nil {
+		return "", err
+	}
+
+	var txt string = ""
+	if mr := m.MultipartReader(); mr != nil {
+		var noCT bool = false
+
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			} else if err != nil {
+				return "", err
+			}
+
+			t, _, _ := p.Header.ContentType()
+			if t != "text/html" {
+				noCT = true
+				continue
+			}
+			if txt, err = ioReaderToString(p.Body); err != nil {
+				return "", err
+			}
+			noCT = false
+			break
+		}
+		if noCT {
+			return "", errors.New(
+				fmt.Sprintf("Expected text/html content type, found others\n"),
+			)
+		}
+	} else {
+		t, _, _ := m.Header.ContentType()
+		if t != "text/html" {
+			return "", errors.New(
+				fmt.Sprintf("Expected text/html content type, found: %s\n", t),
+			)
+		}
+		if txt, err = ioReaderToString(m.Body); err != nil {
+			return "", err
+		}
+	}
+
+	if rawOutput {
+		return txt, nil
+	}
+
+	converter := md.NewConverter("", true, nil)
+	converter.Use(mdplug.GitHubFlavored())
+
+	markdown, err := converter.ConvertString(txt)
+	if err != nil {
+		return "", err
+	}
+
+	return markdown, nil
+}
+
+func HTMLtoMarkdown(html *string, rawOutput bool) (string, error) {
+	if rawOutput {
+		return *html, nil
+	}
+
 	converter := md.NewConverter("", true, nil)
 	converter.Use(mdplug.GitHubFlavored())
 
@@ -111,7 +203,6 @@ func RenderImg(md string) (string, []InlineImage, error) {
 }
 
 func renderImage(img image.Image, imgTitle string, mode string, width int) (string, error) {
-
 	switch mode {
 	case "sixel":
 		var b bytes.Buffer
@@ -150,16 +241,14 @@ func renderImage(img image.Image, imgTitle string, mode string, width int) (stri
 }
 
 func RenderMarkdown(title, markdown string, images []InlineImage, width int) (string, error) {
-
 	renderer, _ := glamour.NewTermRenderer(
 		glamour.WithEnvironmentConfig(),
 		glamour.WithWordWrap(width),
 	)
 
-	output, err :=
-		renderer.Render(
-			fmt.Sprintf("# %s\n\n%s", title, markdown),
-		)
+	output, err := renderer.Render(
+		fmt.Sprintf("# %s\n\n%s", title, markdown),
+	)
 	if err != nil {
 		output = fmt.Sprintf("%v", err)
 	} else {
@@ -212,7 +301,7 @@ func RenderMarkdown(title, markdown string, images []InlineImage, width int) (st
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "reader <url/file/->",
+	Use:   "reader < url/file/- >",
 	Short: "Reader is a command line web reader",
 	Long: "A minimal command line reader offering better readability of web " +
 		"pages on the CLI. [https://github.com/mrusme/reader]",
@@ -250,18 +339,30 @@ var rootCmd = &cobra.Command{
 			}
 		}
 
+		if isEML {
+			noReadability = true
+		}
 		title, content, err := MakeReadable(&rawUrl, logger, !noCycleTLS)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 
-		markdown, err := HTMLtoMarkdown(&content)
+		var markdown string = ""
+		if isEML {
+			markdown, err = EMLToMarkdown(&content, rawOut)
+		} else {
+			markdown, err = HTMLtoMarkdown(&content, rawOut)
+		}
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
 
+		if rawOut == true {
+			fmt.Print(markdown)
+			os.Exit(0)
+		}
 		if noPretty == true {
 			fmt.Printf("# %s\n\n", title)
 			fmt.Print(markdown)
@@ -300,6 +401,18 @@ func Execute() {
 		"no-cycletls",
 		false,
 		"disable use of CycleTLS",
+	)
+	rootCmd.Flags().BoolVar(
+		&isEML,
+		"eml",
+		false,
+		"input is EML (email) format",
+	)
+	rootCmd.Flags().BoolVar(
+		&rawOut,
+		"raw",
+		false,
+		"output raw text",
 	)
 	rootCmd.Flags().BoolVarP(
 		&verbose,

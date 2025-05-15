@@ -1,21 +1,19 @@
-reader
-------
+## reader
 
 [![Static 
 Badge](https://img.shields.io/badge/Join_on_Matrix-green?style=for-the-badge&logo=element&logoColor=%23ffffff&label=Chat&labelColor=%23333&color=%230DBD8B&link=https%3A%2F%2Fmatrix.to%2F%23%2F%2521PHlbgZTdrhjkCJrfVY%253Amatrix.org)](https://matrix.to/#/%21PHlbgZTdrhjkCJrfVY%3Amatrix.org)
 
-*reader* is for your command line what the “readability” view is for modern
+_reader_ is for your command line what the “readability” view is for modern
 browsers: A lightweight tool offering better readability of web pages on the
 CLI.
 
 ![reader](demo.gif)
 
-`reader` parses a web page for its actual content and displays it in nicely
-highlighted text on the command line. In addition, `reader` renders embedded
-images from that page as colored block-renders on the terminal as well.
+`reader` parses a web page (or an EML file) for its actual content and displays
+it in nicely highlighted text on the command line. In addition, `reader` renders
+embedded images from that page as colored block-renders on the terminal as well.
 
-
-## Installation 
+## Installation
 
 ```
 go install github.com/mrusme/reader@latest
@@ -26,9 +24,8 @@ If the above fails, then the following should work:
 ```
 git clone https://github.com/mrusme/reader.git
 cd reader
-go install 
+go install
 ```
-
 
 ## Usage
 
@@ -68,15 +65,25 @@ reader --image-mode sixel https://xn--gckvb8fzb.com/travel-aruba/
 
 ![sixel](sixel.png)
 
+Render EML file:
+
+```sh
+reader --eml -i none my-email-file.eml
+```
+
+Output EML file raw:
+
+```sh
+reader --eml --raw my-email-file.eml
+```
+
 More options:
 
 ```sh
 reader -h
 ```
 
-
 ## Examples
-
 
 ### Using `reader` from within `w3m`
 
@@ -95,7 +102,6 @@ If you want to navigate through the page:
 reader $W3M_URL | less -R
 ```
 
-
 ### Using `reader` from within `vim`/`neovim`
 
 Add the following function/mapping to your `init.vim`:
@@ -112,6 +118,3 @@ nmap gx <Plug>vertopen_url
 
 Open a document and place the cursor on a link, then press `g` followed by `x`.
 Vim will open a new terminal and show you the output of `reader`.
-
-
-
