@@ -9,11 +9,12 @@ require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/dolmen-go/kittyimg v0.0.0-20250509141512-6d6dc00afde0
 	github.com/eliukblau/pixterm v1.3.2
+	github.com/emersion/go-message v0.18.2
 	github.com/mattn/go-sixel v0.0.5
 	github.com/mrusme/journalist v1.0.1
 	github.com/spf13/cobra v1.9.1
 	go.uber.org/zap v1.27.0
-	golang.org/x/crypto v0.38.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/image v0.27.0
 )
 
@@ -36,7 +37,6 @@ require (
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
-	github.com/emersion/go-message v0.18.2 // indirect
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
 	github.com/go-shiori/go-readability v0.0.0-20250217085726-9f5bf5ca7612 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
@@ -65,10 +65,10 @@ require (
 	github.com/yuin/goldmark v1.7.11 // indirect
 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/net v0.40.0 // indirect
-	golang.org/x/sys v0.33.0 // indirect
-	golang.org/x/term v0.32.0 // indirect
-	golang.org/x/text v0.25.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	h12.io/socks v1.0.3 // indirect
