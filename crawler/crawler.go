@@ -106,15 +106,15 @@ func (c *Crawler) GetReadable(useCycleTLS bool) (ItemCrawled, error) {
 func (c *Crawler) FromAuto(useCycleTLS bool) error {
 	var err error
 
-	scheme := ""
-	if c.sourceLocationUrl != nil {
-		scheme = c.sourceLocationUrl.Scheme
+	isHTTP := false
+	if u := c.sourceLocationUrl; u != nil && u.Host != "" {
+		isHTTP = u.Scheme == "http" || u.Scheme == "https"
 	}
 
 	switch {
 	case c.sourceLocation == "-":
 		err = c.FromStdin()
-	case scheme == "http", scheme == "https":
+	case isHTTP:
 		if useCycleTLS {
 			err = c.FromHTTPCycleTLS()
 		} else {
