@@ -1,34 +1,80 @@
-# .goreleaser.yaml
 version: 2
-builds:
-  -
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - darwin
-      - linux
-      - netbsd
-      - openbsd
-      - freebsd
-      # - plan9
-      - windows
-    goarch:
-      - 386
-      - amd64
-      - arm
-      - arm64
-    goarm:
-      - 6
-      - 7
-    ignore:
-      - goos: darwin
-        goarch: 386
-      - goos: darwin
-        goarch: arm
-      - goos: netbsd
-        goarch: arm64
-      - goos: freebsd
-        goarm: arm64
-      - goos: plan9
-        goarm: arm64
 
+project_name: reader
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+    mod_timestamp: '{{ .CommitTimestamp }}'
+    targets:
+      - aix_ppc64
+      - darwin_amd64
+      - darwin_arm64
+      - dragonfly_amd64
+      - freebsd_386
+      - freebsd_amd64
+      - freebsd_arm_6
+      - freebsd_arm_7
+      - freebsd_arm64
+      - illumos_amd64
+      - linux_386
+      - linux_amd64
+      - linux_arm_6
+      - linux_arm_7
+      - linux_arm64
+      - linux_loong64
+      - linux_mips
+      - linux_mips64
+      - linux_mips64le
+      - linux_mipsle
+      - linux_ppc64
+      - linux_ppc64le
+      - linux_riscv64
+      - linux_s390x
+      - netbsd_386
+      - netbsd_amd64
+      - netbsd_arm_6
+      - netbsd_arm_7
+      - netbsd_arm64
+      - openbsd_386
+      - openbsd_amd64
+      - openbsd_arm_6
+      - openbsd_arm_7
+      - openbsd_arm64
+      - openbsd_ppc64
+      - openbsd_riscv64
+      - solaris_amd64
+      - windows_386
+      - windows_amd64
+      - windows_arm64
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: '{{ incpatch .Version }}-next'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
