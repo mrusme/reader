@@ -27,6 +27,7 @@ import (
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	mdplug "github.com/JohannesKaufmann/html-to-markdown/plugin"
 	"github.com/emersion/go-message"
+	_ "github.com/emersion/go-message/charset"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 
@@ -80,75 +81,88 @@ func MakeReadable(rawUrl *string, logger *zap.Logger, cycleTLS bool) (string, st
 	return article.Title, article.ContentHtml, nil
 }
 
-func ioReaderToString(r io.Reader) (string, error) {
-	buf := make([]byte, 8)
-	var text strings.Builder
-
-	for {
-		n, err := r.Read(buf)
-		if n > 0 {
-			text.Write(buf[:n])
-		}
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			return "", err
-		}
+func stripMboxSeparator(eml string) string {
+	if !strings.HasPrefix(eml, "From ") {
+		return eml
 	}
 
-	return text.String(), nil
+	_, rest, found := strings.Cut(eml, "\n")
+	if !found {
+		return eml
+	}
+
+	return rest
 }
 
-func EMLToMarkdown(eml *string, rawOutput bool) (string, error) {
-	m, err := message.Read(strings.NewReader(*eml))
-	if message.IsUnknownCharset(err) {
-		// TODO
-	} else if err != nil {
-		return "", err
-	}
+func isReadableEML(err error) bool {
+	return message.IsUnknownCharset(err) || message.IsUnknownEncoding(err)
+}
 
-	var txt string = ""
-	if mr := m.MultipartReader(); mr != nil {
-		var noCT bool = false
+func findEMLBody(entity *message.Entity) (string, string, error) {
+	if mr := entity.MultipartReader(); mr != nil {
+		var html, text string
 
-		for {
+		for html == "" || text == "" {
 			p, err := mr.NextPart()
 			if err == io.EOF {
 				break
-			} else if err != nil {
-				return "", err
+			} else if err != nil && !isReadableEML(err) {
+				return "", "", err
 			}
 
-			t, _, _ := p.Header.ContentType()
-			if t != "text/html" {
-				noCT = true
-				continue
+			pHtml, pText, err := findEMLBody(p)
+			if err != nil {
+				return "", "", err
 			}
-			if txt, err = ioReaderToString(p.Body); err != nil {
-				return "", err
+			if html == "" {
+				html = pHtml
 			}
-			noCT = false
-			break
+			if text == "" {
+				text = pText
+			}
 		}
-		if noCT {
-			return "", errors.New(
-				fmt.Sprintf("Expected text/html content type, found others\n"),
-			)
+
+		return html, text, nil
+	}
+
+	t, _, _ := entity.Header.ContentType()
+	if t != "text/html" && t != "text/plain" {
+		return "", "", nil
+	}
+
+	body, err := io.ReadAll(entity.Body)
+	if err != nil {
+		return "", "", err
+	}
+
+	if t == "text/html" {
+		return string(body), "", nil
+	}
+	return "", string(body), nil
+}
+
+func EMLToMarkdown(eml *string, rawOutput bool) (string, string, error) {
+	m, err := message.Read(strings.NewReader(stripMboxSeparator(*eml)))
+	if err != nil && !isReadableEML(err) {
+		return "", "", err
+	}
+
+	subject, _ := m.Header.Text("Subject")
+
+	txt, text, err := findEMLBody(m)
+	if err != nil {
+		return "", "", err
+	}
+
+	if txt == "" {
+		if text == "" {
+			return "", "", errors.New("no text/html or text/plain part in message")
 		}
-	} else {
-		t, _, _ := m.Header.ContentType()
-		if t != "text/html" {
-			return "", errors.New(
-				fmt.Sprintf("Expected text/html content type, found: %s\n", t),
-			)
-		}
-		if txt, err = ioReaderToString(m.Body); err != nil {
-			return "", err
-		}
+		return subject, text, nil
 	}
 
 	if rawOutput {
-		return txt, nil
+		return subject, txt, nil
 	}
 
 	converter := md.NewConverter("", true, nil)
@@ -156,10 +170,10 @@ func EMLToMarkdown(eml *string, rawOutput bool) (string, error) {
 
 	markdown, err := converter.ConvertString(txt)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	return markdown, nil
+	return subject, markdown, nil
 }
 
 func HTMLtoMarkdown(html *string, rawOutput bool) (string, error) {
@@ -351,7 +365,7 @@ var rootCmd = &cobra.Command{
 
 		var markdown string = ""
 		if isEML {
-			markdown, err = EMLToMarkdown(&content, rawOut)
+			title, markdown, err = EMLToMarkdown(&content, rawOut)
 		} else {
 			markdown, err = HTMLtoMarkdown(&content, rawOut)
 		}

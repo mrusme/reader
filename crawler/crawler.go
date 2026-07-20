@@ -63,21 +63,17 @@ func (c *Crawler) Close() {
 	}
 }
 
-func (c *Crawler) SetLocation(sourceLocation string) error {
-	var urlUrl *url.URL
-	var err error
+func (c *Crawler) SetLocation(sourceLocation string) {
+	c.sourceLocation = sourceLocation
+	c.sourceLocationUrl = nil
 
-	if sourceLocation != "-" {
-		urlUrl, err = url.Parse(sourceLocation)
-		if err != nil {
-			return err
-		}
+	if sourceLocation == "-" {
+		return
 	}
 
-	c.sourceLocation = sourceLocation
-	c.sourceLocationUrl = urlUrl
-
-	return nil
+	if urlUrl, err := url.Parse(sourceLocation); err == nil {
+		c.sourceLocationUrl = urlUrl
+	}
 }
 
 func (c *Crawler) GetSource() io.ReadCloser {
@@ -110,20 +106,22 @@ func (c *Crawler) GetReadable(useCycleTLS bool) (ItemCrawled, error) {
 func (c *Crawler) FromAuto(useCycleTLS bool) error {
 	var err error
 
-	switch c.sourceLocation {
-	case "-":
+	scheme := ""
+	if c.sourceLocationUrl != nil {
+		scheme = c.sourceLocationUrl.Scheme
+	}
+
+	switch {
+	case c.sourceLocation == "-":
 		err = c.FromStdin()
-	default:
-		switch c.sourceLocationUrl.Scheme {
-		case "http", "https":
-			if useCycleTLS {
-				err = c.FromHTTPCycleTLS()
-			} else {
-				err = c.FromHTTP()
-			}
-		default:
-			err = c.FromFile()
+	case scheme == "http", scheme == "https":
+		if useCycleTLS {
+			err = c.FromHTTPCycleTLS()
+		} else {
+			err = c.FromHTTP()
 		}
+	default:
+		err = c.FromFile()
 	}
 
 	return err
