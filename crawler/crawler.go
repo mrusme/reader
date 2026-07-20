@@ -170,6 +170,21 @@ func (c *Crawler) FromHTTP() error {
 	return nil
 }
 
+func (c *Crawler) proxyFromEnvironment() string {
+	if c.sourceLocationUrl == nil {
+		return ""
+	}
+
+	proxyUrl, err := http.ProxyFromEnvironment(&http.Request{
+		URL: c.sourceLocationUrl,
+	})
+	if err != nil || proxyUrl == nil {
+		return ""
+	}
+
+	return proxyUrl.String()
+}
+
 func (c *Crawler) FromHTTPCycleTLS() error {
 	client := cycletls.Init()
 
@@ -177,6 +192,7 @@ func (c *Crawler) FromHTTPCycleTLS() error {
 		Body:      "",
 		Ja3:       cycleTLSJa3,
 		UserAgent: cycleTLSUserAgent,
+		Proxy:     c.proxyFromEnvironment(),
 	}, "GET")
 	if err != nil {
 		return err

@@ -120,6 +120,21 @@ More options:
 reader -h
 ```
 
+## Proxy
+
+`reader` honors the `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY` environment
+variables, in both their upper and lower case spellings. This covers fetching
+the page itself as well as the images embedded in it.
+
+```sh
+export HTTPS_PROXY=http://proxy.example.com:3128
+reader https://xn--gckvb8fzb.com/superhighway84/
+```
+
+The proxy URL may include credentials, as in
+`http://user:password@proxy.example.com:3128`. Besides `http` and `https`, the
+`socks5` and `socks5h` schemes are supported as well.
+
 ## Examples
 
 ### Using `reader` from within `w3m`
