@@ -30,7 +30,7 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh/terminal"
 
-	"github.com/mrusme/journalist/crawler"
+	"github.com/mrusme/reader/crawler"
 	"go.uber.org/zap"
 )
 
@@ -58,6 +58,7 @@ var (
 
 func MakeReadable(rawUrl *string, logger *zap.Logger, cycleTLS bool) (string, string, error) {
 	var crwlr *crawler.Crawler = crawler.New(logger)
+	defer crwlr.Close()
 
 	crwlr.SetLocation(*rawUrl)
 

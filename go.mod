@@ -3,21 +3,23 @@ module github.com/mrusme/reader
 go 1.25.0
 
 require (
+	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30
 	github.com/JohannesKaufmann/html-to-markdown v1.6.0
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/dolmen-go/kittyimg v1.0.0
 	github.com/eliukblau/pixterm v1.3.2
 	github.com/emersion/go-message v0.18.2
+	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
 	github.com/mattn/go-sixel v0.0.12
-	github.com/mrusme/journalist v1.0.1
+	github.com/memclutter/go-cloudflare-scraper v0.0.0-20220907170638-a1faa8b189bd
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/image v0.44.0
+	golang.org/x/net v0.57.0
 )
 
 require (
-	github.com/Danny-Dasilva/CycleTLS/cycletls v1.0.30 // indirect
 	github.com/Danny-Dasilva/fhttp v0.0.0-20260106165651-41258808b131 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/PuerkitoBio/goquery v1.12.0 // indirect
@@ -40,7 +42,6 @@ require (
 	github.com/gaukas/clienthellod v0.4.2 // indirect
 	github.com/gaukas/godicttls v0.0.4 // indirect
 	github.com/go-shiori/dom v0.0.0-20230515143342-73569d674e1c // indirect
-	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gogs/chardet v0.0.0-20211120154057-b7413eaefb8f // indirect
 	github.com/google/gopacket v1.1.19 // indirect
@@ -52,10 +53,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.23 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
-	github.com/memclutter/go-cloudflare-scraper v0.0.0-20220907170638-a1faa8b189bd // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
-	github.com/mmcdole/gofeed v1.4.0 // indirect
-	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
 	github.com/onsi/ginkgo/v2 v2.32.0 // indirect
@@ -74,7 +72,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20260718201538-764159d718ef // indirect
 	golang.org/x/mod v0.38.0 // indirect
-	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.45.0 // indirect
