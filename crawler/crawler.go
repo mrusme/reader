@@ -1,15 +1,18 @@
 package crawler
 
 import (
-	"bufio"
+	"errors"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
-	"go.uber.org/zap"
 	"golang.org/x/net/publicsuffix"
 
 	"github.com/Danny-Dasilva/CycleTLS/cycletls"
@@ -18,9 +21,15 @@ import (
 	"github.com/go-shiori/go-readability"
 )
 
-const defaultUserAgent = "Mozilla/5.0 AppleWebKit/537.36 " +
-	"(KHTML, like Gecko; compatible; " +
-	"Googlebot/2.1; +http://www.google.com/bot.html)"
+const (
+	DefaultUserAgent = "Mozilla/5.0 AppleWebKit/537.36 " +
+		"(KHTML, like Gecko; compatible; " +
+		"Googlebot/2.1; +http://www.google.com/bot.html)"
+
+	DefaultTimeout = 30 * time.Second
+
+	StdinLocation = "-"
+)
 
 const cycleTLSJa3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-" +
 	"49162-49161-49171-49172-51-57-47-53-10,0-23-65281-10-11-35-16-5-51-43-13-" +
@@ -29,102 +38,125 @@ const cycleTLSJa3 = "771,4865-4867-4866-49195-49199-52393-52392-49196-49200-" +
 const cycleTLSUserAgent = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:87.0) " +
 	"Gecko/20100101 Firefox/87.0"
 
-type ItemCrawled struct {
+var ErrNoLocation = errors.New("no source location set")
+
+type StatusError struct {
+	Location   string
+	StatusCode int
+}
+
+func (e *StatusError) Error() string {
+	status := strconv.Itoa(e.StatusCode)
+	if text := http.StatusText(e.StatusCode); text != "" {
+		status += " " + text
+	}
+	return fmt.Sprintf("%s: server returned HTTP %s", e.Location, status)
+}
+
+type Article struct {
 	Title       string
 	Author      string
 	Excerpt     string
 	SiteName    string
 	Image       string
-	ContentHtml string
+	ContentHTML string
 	ContentText string
 }
 
 type Crawler struct {
-	source            io.ReadCloser
-	sourceLocation    string
-	sourceLocationUrl *url.URL
+	source      io.ReadCloser
+	location    string
+	locationURL *url.URL
 
 	UserAgent string
+	Timeout   time.Duration
 
-	logger *zap.Logger
+	log *slog.Logger
 }
 
-func New(logger *zap.Logger) *Crawler {
+func New(log *slog.Logger) *Crawler {
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
+	}
+
 	return &Crawler{
-		UserAgent: defaultUserAgent,
-		logger:    logger,
+		UserAgent: DefaultUserAgent,
+		Timeout:   DefaultTimeout,
+		log:       log,
 	}
 }
 
-func (c *Crawler) Close() {
-	if c.source != nil {
-		c.source.Close()
-		c.source = nil
+func (c *Crawler) Close() error {
+	if c.source == nil {
+		return nil
 	}
+
+	source := c.source
+	c.source = nil
+	return source.Close()
 }
 
-func (c *Crawler) SetLocation(sourceLocation string) {
-	c.sourceLocation = sourceLocation
-	c.sourceLocationUrl = nil
+func (c *Crawler) SetLocation(location string) {
+	c.location = location
+	c.locationURL = nil
 
-	if sourceLocation == "-" {
+	if location == StdinLocation {
 		return
 	}
 
-	if urlUrl, err := url.Parse(sourceLocation); err == nil {
-		c.sourceLocationUrl = urlUrl
+	if locationURL, err := url.Parse(location); err == nil {
+		c.locationURL = locationURL
 	}
 }
 
-func (c *Crawler) GetSource() io.ReadCloser {
+func (c *Crawler) Source() io.ReadCloser {
 	return c.source
 }
 
-func (c *Crawler) GetReadable(useCycleTLS bool) (ItemCrawled, error) {
+func (c *Crawler) GetReadable(useCycleTLS bool) (Article, error) {
 	if err := c.FromAuto(useCycleTLS); err != nil {
-		return ItemCrawled{}, err
+		return Article{}, err
 	}
 
-	article, err := readability.FromReader(c.source, c.sourceLocationUrl)
+	article, err := readability.FromReader(c.source, c.locationURL)
 	if err != nil {
-		return ItemCrawled{}, err
+		return Article{}, err
 	}
 
-	item := ItemCrawled{
+	return Article{
 		Title:       article.Title,
 		Author:      article.Byline,
 		Excerpt:     article.Excerpt,
 		SiteName:    article.SiteName,
 		Image:       article.Image,
-		ContentHtml: article.Content,
+		ContentHTML: article.Content,
 		ContentText: article.TextContent,
-	}
-
-	return item, nil
+	}, nil
 }
 
 func (c *Crawler) FromAuto(useCycleTLS bool) error {
-	var err error
-
-	isHTTP := false
-	if u := c.sourceLocationUrl; u != nil && u.Host != "" {
-		isHTTP = u.Scheme == "http" || u.Scheme == "https"
-	}
-
 	switch {
-	case c.sourceLocation == "-":
-		err = c.FromStdin()
-	case isHTTP:
+	case c.location == "":
+		return ErrNoLocation
+	case c.location == StdinLocation:
+		return c.FromStdin()
+	case c.isHTTP():
 		if useCycleTLS {
-			err = c.FromHTTPCycleTLS()
-		} else {
-			err = c.FromHTTP()
+			return c.FromHTTPCycleTLS()
 		}
+		return c.FromHTTP()
 	default:
-		err = c.FromFile()
+		return c.FromFile()
+	}
+}
+
+func (c *Crawler) isHTTP() bool {
+	u := c.locationURL
+	if u == nil || u.Host == "" {
+		return false
 	}
 
-	return err
+	return u.Scheme == "http" || u.Scheme == "https"
 }
 
 func (c *Crawler) FromHTTP() error {
@@ -143,9 +175,10 @@ func (c *Crawler) FromHTTP() error {
 	client := &http.Client{
 		Jar:       jar,
 		Transport: transport,
+		Timeout:   c.Timeout,
 	}
 
-	req, err := http.NewRequest("GET", c.sourceLocation, nil)
+	req, err := http.NewRequest(http.MethodGet, c.location, nil)
 	if err != nil {
 		return err
 	}
@@ -160,62 +193,139 @@ func (c *Crawler) FromHTTP() error {
 	req.Header.Set("DNT",
 		"1")
 
+	c.log.Debug("Crawler.FromHTTP",
+		"location", c.location,
+		"userAgent", c.UserAgent,
+	)
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 
-	c.Close()
+	if !isSuccess(resp.StatusCode) {
+		resp.Body.Close()
+		return &StatusError{Location: c.location, StatusCode: resp.StatusCode}
+	}
+
+	c.log.Debug("Crawler.FromHTTP",
+		"status", resp.StatusCode,
+		"contentType", resp.Header.Get("Content-Type"),
+	)
+
+	if err := c.Close(); err != nil {
+		resp.Body.Close()
+		return err
+	}
+
 	c.source = resp.Body
 	return nil
 }
 
-func (c *Crawler) proxyFromEnvironment() string {
-	if c.sourceLocationUrl == nil {
-		return ""
-	}
-
-	proxyUrl, err := http.ProxyFromEnvironment(&http.Request{
-		URL: c.sourceLocationUrl,
-	})
-	if err != nil || proxyUrl == nil {
-		return ""
-	}
-
-	return proxyUrl.String()
-}
-
 func (c *Crawler) FromHTTPCycleTLS() error {
 	client := cycletls.Init()
+	defer client.Close()
 
-	resp, err := client.Do(c.sourceLocation, cycletls.Options{
-		Body:      "",
+	c.log.Debug("Crawler.FromHTTPCycleTLS",
+		"location", c.location,
+		"userAgent", cycleTLSUserAgent,
+	)
+
+	resp, err := client.Do(c.location, cycletls.Options{
 		Ja3:       cycleTLSJa3,
 		UserAgent: cycleTLSUserAgent,
 		Proxy:     c.proxyFromEnvironment(),
-	}, "GET")
+		Timeout:   c.timeoutSeconds(),
+	}, http.MethodGet)
 	if err != nil {
 		return err
 	}
 
-	c.Close()
+	if !isSuccess(resp.Status) {
+		return &StatusError{Location: c.location, StatusCode: resp.Status}
+	}
+
+	c.log.Debug("Crawler.FromHTTPCycleTLS",
+		"status", resp.Status,
+		"finalUrl", resp.FinalUrl,
+	)
+
+	if err := c.Close(); err != nil {
+		return err
+	}
+
 	c.source = io.NopCloser(strings.NewReader(resp.Body))
 	return nil
 }
 
 func (c *Crawler) FromFile() error {
-	file, err := os.Open(c.sourceLocation)
+	file, err := os.Open(c.location)
 	if err != nil {
 		return err
 	}
 
-	c.Close()
+	info, err := file.Stat()
+	if err != nil {
+		file.Close()
+		return err
+	}
+	if info.IsDir() {
+		file.Close()
+		return fmt.Errorf("%s: is a directory", c.location)
+	}
+
+	c.log.Debug("Crawler.FromFile",
+		"location", c.location,
+		"size", info.Size(),
+	)
+
+	if err := c.Close(); err != nil {
+		file.Close()
+		return err
+	}
+
 	c.source = file
 	return nil
 }
 
 func (c *Crawler) FromStdin() error {
-	c.Close()
-	c.source = io.NopCloser(bufio.NewReader(os.Stdin))
+	c.log.Debug("Crawler.FromStdin")
+
+	if err := c.Close(); err != nil {
+		return err
+	}
+
+	c.source = io.NopCloser(os.Stdin)
 	return nil
+}
+
+func (c *Crawler) proxyFromEnvironment() string {
+	if c.locationURL == nil {
+		return ""
+	}
+
+	proxyURL, err := http.ProxyFromEnvironment(&http.Request{
+		URL: c.locationURL,
+	})
+	if err != nil || proxyURL == nil {
+		return ""
+	}
+
+	return proxyURL.String()
+}
+
+func (c *Crawler) timeoutSeconds() int {
+	if c.Timeout <= 0 {
+		return 0
+	}
+
+	seconds := int(c.Timeout.Round(time.Second) / time.Second)
+	if seconds < 1 {
+		return 1
+	}
+	return seconds
+}
+
+func isSuccess(statusCode int) bool {
+	return statusCode >= http.StatusOK && statusCode < http.StatusMultipleChoices
 }

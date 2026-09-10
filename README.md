@@ -19,13 +19,13 @@ embedded images from that page as colored block-renders on the terminal as well.
 ## Installation
 
 ```
-go install github.com/mrusme/reader@latest
+go install xn--gckvb8fzb.com/reader@latest
 ```
 
 If the above fails, then the following should work:
 
 ```
-git clone https://github.com/mrusme/reader.git
+git clone https://tty.fail/mrus/reader.git
 cd reader
 go install
 ```

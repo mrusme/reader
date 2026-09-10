@@ -1,458 +1,328 @@
 package cmd
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"image"
-	"image/color"
 	"io"
-	"net/http"
+	"log/slog"
 	"os"
-	"regexp"
-	"strconv"
 	"strings"
+	"time"
+	"unicode"
 
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-
-	_ "golang.org/x/image/webp"
-
-	"github.com/charmbracelet/glamour"
-	"github.com/dolmen-go/kittyimg"
-	"github.com/eliukblau/pixterm/pkg/ansimage"
-	"github.com/mattn/go-sixel"
-
-	md "github.com/JohannesKaufmann/html-to-markdown"
-	mdplug "github.com/JohannesKaufmann/html-to-markdown/plugin"
-	"github.com/emersion/go-message"
-	_ "github.com/emersion/go-message/charset"
 	"github.com/spf13/cobra"
-	"golang.org/x/crypto/ssh/terminal"
+	"golang.org/x/term"
 
-	"github.com/mrusme/reader/crawler"
-	"go.uber.org/zap"
+	"xn--gckvb8fzb.com/reader/crawler"
+	"xn--gckvb8fzb.com/reader/internal/eml"
+	"xn--gckvb8fzb.com/reader/internal/markdown"
+	"xn--gckvb8fzb.com/reader/internal/render"
 )
 
-var (
-	verbose         bool
-	noPretty        bool
-	noReadability   bool
-	noCycleTLS      bool
-	isEML           bool
-	rawOut          bool
-	imageMode       string
-	terminalWidth   int
-	validImageModes = []string{"none", "ansi", "ansi-dither", "kitty", "sixel"}
+const programName = "reader"
+
+const maxErrorLength = 200
+
+const (
+	exitSuccess = 0
+	exitFailure = 1
+	exitUsage   = 2
 )
 
-type InlineImage struct {
-	URL   string
-	Title string
+type usageError struct {
+	err error
 }
 
-var (
-	mdImgRegex            = regexp.MustCompile(`(?m)\[{0,1}!\[(:?\]\(.*\)){0,1}(.*)\]\((.+)\)`)
-	mdImgPlaceholderRegex = regexp.MustCompile(`(?m)\$\$\$([0-9]*)\$`)
-)
+func (e *usageError) Error() string {
+	return e.err.Error()
+}
 
-func MakeReadable(rawUrl *string, logger *zap.Logger, cycleTLS bool) (string, string, error) {
-	var crwlr *crawler.Crawler = crawler.New(logger)
-	defer crwlr.Close()
+func (e *usageError) Unwrap() error {
+	return e.err
+}
 
-	crwlr.SetLocation(*rawUrl)
+func usagef(format string, args ...any) error {
+	return &usageError{err: fmt.Errorf(format, args...)}
+}
 
-	if noReadability == true {
-		if err := crwlr.FromAuto(true); err != nil {
-			return "", "", err
+type options struct {
+	markdownOutput bool
+	noReadability  bool
+	noCycleTLS     bool
+	isEML          bool
+	rawOutput      bool
+	verbose        bool
+	imageMode      string
+	terminalWidth  int
+	timeout        time.Duration
+}
+
+type document struct {
+	title string
+	html  string
+	text  string
+}
+
+func (d document) body() string {
+	if d.html != "" {
+		return d.html
+	}
+
+	return d.text
+}
+
+func Execute() int {
+	err := newRootCommand().Execute()
+	if err == nil {
+		return exitSuccess
+	}
+
+	fmt.Fprintf(os.Stderr, "%s: %s\n", programName, errorMessage(err))
+
+	code := exitCode(err)
+	if code == exitUsage {
+		fmt.Fprintf(os.Stderr,
+			"Try '%s --help' for more information.\n", programName)
+	}
+
+	return code
+}
+
+func errorMessage(err error) string {
+	message := strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return ' '
+		}
+		if !unicode.IsGraphic(r) {
+			return -1
+		}
+		return r
+	}, err.Error())
+
+	message = strings.Join(strings.Fields(message), " ")
+	if message == "" {
+		return "unknown error"
+	}
+
+	if runes := []rune(message); len(runes) > maxErrorLength {
+		return string(runes[:maxErrorLength]) + "..."
+	}
+
+	return message
+}
+
+func exitCode(err error) int {
+	if err == nil {
+		return exitSuccess
+	}
+
+	var usage *usageError
+	if errors.As(err, &usage) {
+		return exitUsage
+	}
+
+	return exitFailure
+}
+
+func newRootCommand() *cobra.Command {
+	opts := &options{}
+	build := currentBuild()
+
+	cmd := &cobra.Command{
+		Use:   programName + " [option]... <url|file|->",
+		Short: "Reader is a command line web reader",
+		Long: "A minimal command line reader offering better readability of " +
+			"web pages on the CLI.\n[https://tty.fail/mrus/reader]\n\n" +
+			"The source is a URL, the path of a local file, or - to read " +
+			"from standard input.",
+		Args:                  exactlyOneSource,
+		Version:               build.Version,
+		DisableFlagsInUseLine: true,
+		SilenceErrors:         true,
+		SilenceUsage:          true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return opts.run(cmd, args[0])
+		},
+	}
+
+	cmd.SetVersionTemplate(build.template())
+	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return &usageError{err: err}
+	})
+
+	registerFlags(cmd, opts)
+
+	return cmd
+}
+
+func registerFlags(cmd *cobra.Command, opts *options) {
+	flags := cmd.Flags()
+	flags.SortFlags = false
+
+	flags.BoolVarP(&opts.markdownOutput, "markdown-output", "o", false,
+		"disable pretty output, output raw markdown instead")
+	flags.BoolVarP(&opts.noReadability, "no-readability", "r", false,
+		"disable making the HTML content readable")
+	flags.BoolVar(&opts.noCycleTLS, "no-cycletls", false,
+		"disable use of CycleTLS")
+	flags.BoolVar(&opts.isEML, "eml", false,
+		"input is EML (email) format")
+	flags.BoolVar(&opts.rawOutput, "raw", false,
+		"output raw text")
+	flags.StringVarP(&opts.imageMode, "image-mode", "i",
+		string(render.ImageModeANSI),
+		"image mode ("+strings.Join(render.ImageModes(), "/")+")")
+	flags.IntVarP(&opts.terminalWidth, "terminal-width", "w", 0,
+		"terminal width (0=auto)")
+	flags.DurationVar(&opts.timeout, "timeout", crawler.DefaultTimeout,
+		"network timeout (0=none)")
+	flags.BoolVarP(&opts.verbose, "verbose", "V", false,
+		"verbose output on standard error")
+	flags.BoolP("help", "h", false,
+		"display this help and exit")
+	flags.BoolP("version", "v", false,
+		"output version information and exit")
+}
+
+func exactlyOneSource(_ *cobra.Command, args []string) error {
+	switch {
+	case len(args) == 0:
+		return usagef("missing source operand")
+	case len(args) > 1:
+		return usagef("unexpected operand %q", args[1])
+	}
+
+	return nil
+}
+
+func (o *options) run(cmd *cobra.Command, location string) error {
+	imageMode, err := render.ParseImageMode(o.imageMode)
+	if err != nil {
+		return &usageError{err: err}
+	}
+	if o.terminalWidth < 0 {
+		return usagef("terminal width must not be negative")
+	}
+	if o.timeout < 0 {
+		return usagef("timeout must not be negative")
+	}
+
+	crwlr := crawler.New(newLogger(o.verbose))
+	crwlr.Timeout = o.timeout
+	crwlr.SetLocation(location)
+	defer func() { _ = crwlr.Close() }()
+
+	doc, err := o.read(crwlr)
+	if err != nil {
+		return err
+	}
+
+	out, err := o.format(doc, imageMode)
+	if err != nil {
+		return err
+	}
+
+	_, err = io.WriteString(cmd.OutOrStdout(), out)
+	return err
+}
+
+func (o *options) read(crwlr *crawler.Crawler) (document, error) {
+	useCycleTLS := !o.noCycleTLS
+
+	if o.isEML {
+		if err := crwlr.FromAuto(useCycleTLS); err != nil {
+			return document{}, err
 		}
 
-		buf := new(bytes.Buffer)
-		buf.ReadFrom(crwlr.GetSource())
-		return "", string(buf.String()), nil
-	}
-
-	article, err := crwlr.GetReadable(cycleTLS)
-	if err != nil {
-		return "", "", err
-	}
-
-	return article.Title, article.ContentHtml, nil
-}
-
-func stripMboxSeparator(eml string) string {
-	if !strings.HasPrefix(eml, "From ") {
-		return eml
-	}
-
-	_, rest, found := strings.Cut(eml, "\n")
-	if !found {
-		return eml
-	}
-
-	return rest
-}
-
-func isReadableEML(err error) bool {
-	return message.IsUnknownCharset(err) || message.IsUnknownEncoding(err)
-}
-
-func findEMLBody(entity *message.Entity) (string, string, error) {
-	if mr := entity.MultipartReader(); mr != nil {
-		var html, text string
-
-		for html == "" || text == "" {
-			p, err := mr.NextPart()
-			if err == io.EOF {
-				break
-			} else if err != nil && !isReadableEML(err) {
-				return "", "", err
-			}
-
-			pHtml, pText, err := findEMLBody(p)
-			if err != nil {
-				return "", "", err
-			}
-			if html == "" {
-				html = pHtml
-			}
-			if text == "" {
-				text = pText
-			}
+		msg, err := eml.Parse(crwlr.Source())
+		if err != nil {
+			return document{}, err
 		}
 
-		return html, text, nil
+		return document{title: msg.Subject, html: msg.HTML, text: msg.Text}, nil
 	}
 
-	t, _, _ := entity.Header.ContentType()
-	if t != "text/html" && t != "text/plain" {
-		return "", "", nil
-	}
-
-	body, err := io.ReadAll(entity.Body)
-	if err != nil {
-		return "", "", err
-	}
-
-	if t == "text/html" {
-		return string(body), "", nil
-	}
-	return "", string(body), nil
-}
-
-func EMLToMarkdown(eml *string, rawOutput bool) (string, string, error) {
-	m, err := message.Read(strings.NewReader(stripMboxSeparator(*eml)))
-	if err != nil && !isReadableEML(err) {
-		return "", "", err
-	}
-
-	subject, _ := m.Header.Text("Subject")
-
-	txt, text, err := findEMLBody(m)
-	if err != nil {
-		return "", "", err
-	}
-
-	if txt == "" {
-		if text == "" {
-			return "", "", errors.New("no text/html or text/plain part in message")
+	if o.noReadability {
+		if err := crwlr.FromAuto(useCycleTLS); err != nil {
+			return document{}, err
 		}
-		return subject, text, nil
+
+		body, err := io.ReadAll(crwlr.Source())
+		if err != nil {
+			return document{}, err
+		}
+
+		return document{html: string(body)}, nil
 	}
 
-	if rawOutput {
-		return subject, txt, nil
-	}
-
-	converter := md.NewConverter("", true, nil)
-	converter.Use(mdplug.GitHubFlavored())
-
-	markdown, err := converter.ConvertString(txt)
+	article, err := crwlr.GetReadable(useCycleTLS)
 	if err != nil {
-		return "", "", err
+		return document{}, err
 	}
 
-	return subject, markdown, nil
+	return document{title: article.Title, html: article.ContentHTML}, nil
 }
 
-func HTMLtoMarkdown(html *string, rawOutput bool) (string, error) {
-	if rawOutput {
-		return *html, nil
+func (o *options) format(
+	doc document,
+	imageMode render.ImageMode,
+) (string, error) {
+	if o.rawOutput {
+		return doc.body(), nil
 	}
 
-	converter := md.NewConverter("", true, nil)
-	converter.Use(mdplug.GitHubFlavored())
+	body := doc.text
+	if doc.html != "" {
+		converted, err := markdown.FromHTML(doc.html)
+		if err != nil {
+			return "", err
+		}
+		body = converted
+	}
 
-	markdown, err := converter.ConvertString(*html)
+	body = markdown.Heading(doc.title, body)
+
+	if o.markdownOutput {
+		return body + "\n", nil
+	}
+
+	renderer, err := render.New(render.Options{
+		ImageMode: imageMode,
+		Width:     o.width(),
+		Timeout:   o.timeout,
+	})
 	if err != nil {
 		return "", err
 	}
 
-	return markdown, nil
+	return renderer.Render(body)
 }
 
-func RenderImg(md string) (string, []InlineImage, error) {
-	var images []InlineImage
-
-	markdown := mdImgRegex.
-		ReplaceAllStringFunc(md, func(md string) string {
-			imgs := mdImgRegex.FindAllStringSubmatch(md, -1)
-			if len(imgs) < 1 {
-				return md
-			}
-
-			img := imgs[0]
-			inlineImage := InlineImage{
-				Title: img[2],
-				URL:   img[3],
-			}
-
-			inlineImageIndex := len(images)
-			images = append(images, inlineImage)
-
-			return fmt.Sprintf("$$$%d$", inlineImageIndex)
-		})
-
-	return markdown, images, nil
-}
-
-func renderImage(img image.Image, imgTitle string, mode string, width int) (string, error) {
-	switch mode {
-	case "sixel":
-		var b bytes.Buffer
-		enc := sixel.NewEncoder(&b)
-		enc.Dither = true
-		err := enc.Encode(img)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("\n%s\n  %s", string(b.Bytes()), imgTitle), nil
-
-	case "ansi", "ansi-dither":
-		dm := ansimage.NoDithering
-		if mode == "ansi-dither" {
-			dm = ansimage.DitheringWithBlocks
-		}
-		pix, err := ansimage.NewScaledFromImage(
-			img,
-			int((float64(width) * 0.75)),
-			width,
-			color.Transparent,
-			ansimage.ScaleModeResize,
-			dm,
-		)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("\n%s\n  %s", pix.RenderExt(false, false), imgTitle), nil
-
-	case "kitty":
-		buf := new(bytes.Buffer)
-		kittyimg.Fprintln(buf, img)
-		return string(buf.Bytes()), nil
-	}
-	return "", fmt.Errorf("invalid mode")
-}
-
-func RenderMarkdown(title, markdown string, images []InlineImage, width int) (string, error) {
-	renderer, _ := glamour.NewTermRenderer(
-		glamour.WithEnvironmentConfig(),
-		glamour.WithWordWrap(width),
-	)
-
-	output, err := renderer.Render(
-		fmt.Sprintf("# %s\n\n%s", title, markdown),
-	)
-	if err != nil {
-		output = fmt.Sprintf("%v", err)
-	} else {
-		hc := new(http.Client)
-		output = mdImgPlaceholderRegex.
-			ReplaceAllStringFunc(output, func(md string) string {
-				imgs := mdImgPlaceholderRegex.FindAllStringSubmatch(md, -1)
-				if len(imgs) < 1 {
-					return md
-				}
-
-				img := imgs[0]
-
-				imgIndex, err := strconv.Atoi(img[1])
-				if err != nil {
-					return md
-				}
-
-				imgTitle := images[imgIndex].Title
-				imgURL := images[imgIndex].URL
-
-				res, err := hc.Get(imgURL)
-				if err != nil {
-					return md
-				}
-
-				defer res.Body.Close()
-				if res.StatusCode != http.StatusOK {
-					return md
-				}
-				buf := new(bytes.Buffer)
-				if _, err := io.Copy(buf, res.Body); err != nil {
-					return md
-				}
-
-				im, _, err := image.Decode(bytes.NewReader(buf.Bytes()))
-				if err != nil {
-					return md
-				}
-
-				if ir, err := renderImage(im, imgTitle, imageMode, width); err == nil {
-					return ir
-				} else {
-					return md
-				}
-			})
+func (o *options) width() int {
+	if o.terminalWidth > 0 {
+		return o.terminalWidth
 	}
 
-	return output, nil
+	return detectWidth()
 }
 
-var rootCmd = &cobra.Command{
-	Use:   "reader < url/file/- >",
-	Short: "Reader is a command line web reader",
-	Long: "A minimal command line reader offering better readability of web " +
-		"pages on the CLI. [https://github.com/mrusme/reader]",
-	Args: cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		var logger *zap.Logger
-
-		if verbose == true {
-			logger, _ = zap.NewDevelopment()
-		} else {
-			logger, _ = zap.NewProduction()
+func detectWidth() int {
+	for _, file := range []*os.File{os.Stdout, os.Stderr, os.Stdin} {
+		width, _, err := term.GetSize(int(file.Fd()))
+		if err == nil && width > 0 {
+			return width
 		}
-		defer logger.Sync()
-
-		rawUrl := args[0]
-
-		imValid := false
-		for _, m := range validImageModes {
-			if m == imageMode {
-				imValid = true
-				break
-			}
-		}
-		if !imValid {
-			fmt.Fprintf(os.Stderr, "invalid image mode: %s\n", imageMode)
-			os.Exit(1)
-		}
-
-		if terminalWidth == 0 {
-			tw, _, err := terminal.GetSize(0)
-			if err != nil {
-				terminalWidth = 80
-			} else {
-				terminalWidth = tw
-			}
-		}
-
-		if isEML {
-			noReadability = true
-		}
-		title, content, err := MakeReadable(&rawUrl, logger, !noCycleTLS)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
-		var markdown string = ""
-		if isEML {
-			title, markdown, err = EMLToMarkdown(&content, rawOut)
-		} else {
-			markdown, err = HTMLtoMarkdown(&content, rawOut)
-		}
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-
-		if rawOut == true {
-			fmt.Print(markdown)
-			os.Exit(0)
-		}
-		if noPretty == true {
-			fmt.Printf("# %s\n\n", title)
-			fmt.Print(markdown)
-			fmt.Println("")
-			os.Exit(0)
-		}
-
-		output := markdown
-		var images []InlineImage
-		if imageMode != "none" {
-			output, images, err = RenderImg(markdown)
-		}
-
-		output, err = RenderMarkdown(title, output, images, terminalWidth)
-		fmt.Print(output)
-	},
-}
-
-func Execute() {
-	rootCmd.Flags().BoolVarP(
-		&noPretty,
-		"markdown-output",
-		"o",
-		false,
-		"disable pretty output, output raw markdown instead",
-	)
-	rootCmd.Flags().BoolVarP(
-		&noReadability,
-		"no-readability",
-		"r",
-		false,
-		"disable making the HTML content readable",
-	)
-	rootCmd.Flags().BoolVar(
-		&noCycleTLS,
-		"no-cycletls",
-		false,
-		"disable use of CycleTLS",
-	)
-	rootCmd.Flags().BoolVar(
-		&isEML,
-		"eml",
-		false,
-		"input is EML (email) format",
-	)
-	rootCmd.Flags().BoolVar(
-		&rawOut,
-		"raw",
-		false,
-		"output raw text",
-	)
-	rootCmd.Flags().BoolVarP(
-		&verbose,
-		"verbose",
-		"v",
-		false,
-		"verbose output",
-	)
-	rootCmd.Flags().StringVarP(
-		&imageMode,
-		"image-mode",
-		"i",
-		"ansi",
-		"image mode ("+strings.Join(validImageModes, "/")+")",
-	)
-	rootCmd.Flags().IntVarP(
-		&terminalWidth,
-		"terminal-width",
-		"w",
-		0,
-		"terminal width (0=auto)",
-	)
-
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
+
+	return render.DefaultWidth
+}
+
+func newLogger(verbose bool) *slog.Logger {
+	if !verbose {
+		return slog.New(slog.DiscardHandler)
+	}
+
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	}))
 }

@@ -1,7 +1,11 @@
 package main
 
-import "github.com/mrusme/reader/cmd"
+import (
+	"os"
+
+	"xn--gckvb8fzb.com/reader/cmd"
+)
 
 func main() {
-	cmd.Execute()
+	os.Exit(cmd.Execute())
 }

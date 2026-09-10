@@ -2,6 +2,12 @@ version: 2
 
 project_name: reader
 
+before:
+  hooks:
+    - go mod download
+    - go vet ./...
+    - go test ./...
+
 builds:
   - env:
       - CGO_ENABLED=0
@@ -9,39 +15,51 @@ builds:
       - -trimpath
     ldflags:
       - -s -w
+      - -X xn--gckvb8fzb.com/reader/cmd.version={{ .Version }}
+      - -X xn--gckvb8fzb.com/reader/cmd.commit={{ .FullCommit }}
+      - -X xn--gckvb8fzb.com/reader/cmd.date={{ .CommitDate }}
     mod_timestamp: '{{ .CommitTimestamp }}'
     targets:
       - aix_ppc64
+      - android_arm64
       - darwin_amd64
       - darwin_arm64
       - dragonfly_amd64
       - freebsd_386
       - freebsd_amd64
+      - freebsd_arm_5
       - freebsd_arm_6
       - freebsd_arm_7
       - freebsd_arm64
       - illumos_amd64
       - linux_386
       - linux_amd64
+      - linux_arm_5
       - linux_arm_6
       - linux_arm_7
       - linux_arm64
       - linux_loong64
-      - linux_mips
-      - linux_mips64
-      - linux_mips64le
-      - linux_mipsle
+      - linux_mips_hardfloat
+      - linux_mips_softfloat
+      - linux_mips64_hardfloat
+      - linux_mips64_softfloat
+      - linux_mips64le_hardfloat
+      - linux_mips64le_softfloat
+      - linux_mipsle_hardfloat
+      - linux_mipsle_softfloat
       - linux_ppc64
       - linux_ppc64le
       - linux_riscv64
       - linux_s390x
       - netbsd_386
       - netbsd_amd64
+      - netbsd_arm_5
       - netbsd_arm_6
       - netbsd_arm_7
       - netbsd_arm64
       - openbsd_386
       - openbsd_amd64
+      - openbsd_arm_5
       - openbsd_arm_6
       - openbsd_arm_7
       - openbsd_arm64
@@ -60,7 +78,7 @@ archives:
         formats:
           - zip
     name_template: >-
-      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}{{ with .Arm }}v{{ . }}{{ end }}{{ with .Mips }}_{{ . }}{{ end }}
     files:
       - README.md
       - LICENSE
@@ -70,6 +88,9 @@ checksum:
 
 snapshot:
   version_template: '{{ incpatch .Version }}-next'
+
+release:
+  prerelease: auto
 
 changelog:
   sort: asc
