@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +23,10 @@ const testDocument = `<html><head><title>Foo</title></head><body><article>` +
 	`</article></body></html>`
 
 func TestSetLocationColonPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file names can't contain colons on Windows")
+	}
+
 	locations := []string{
 		"Foo Bar Baz.html",
 		"Foo Bar: Baz.html",

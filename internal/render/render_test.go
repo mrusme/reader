@@ -205,7 +205,12 @@ func TestRenderFileURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fileURL := (&url.URL{Scheme: "file", Path: path}).String()
+	urlPath := filepath.ToSlash(path)
+	if !strings.HasPrefix(urlPath, "/") {
+		urlPath = "/" + urlPath
+	}
+
+	fileURL := (&url.URL{Scheme: "file", Path: urlPath}).String()
 
 	out, err := renderer.Render("![Local](" + fileURL + ")")
 	if err != nil {

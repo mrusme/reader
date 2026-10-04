@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -125,7 +126,7 @@ func (l *loader) read(location string) ([]byte, error) {
 	case "http", "https":
 		return l.fetch(location)
 	case "file":
-		return readLimitedFile(parsed.Path)
+		return readLimitedFile(fileURLPath(parsed))
 	}
 
 	return nil, fmt.Errorf("unsupported image location %q", location)
@@ -151,6 +152,15 @@ func (l *loader) fetch(location string) ([]byte, error) {
 	}
 
 	return readLimited(resp.Body)
+}
+
+func fileURLPath(u *url.URL) string {
+	path := filepath.FromSlash(u.Path)
+	if len(path) > 1 && filepath.VolumeName(path[1:]) != "" {
+		return path[1:]
+	}
+
+	return path
 }
 
 func readLimitedFile(path string) ([]byte, error) {
