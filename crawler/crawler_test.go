@@ -1,13 +1,20 @@
 package crawler
 
 import (
+	"errors"
 	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
-
-	"go.uber.org/zap"
+	"time"
 )
+
+func discardLogger() *slog.Logger {
+	return slog.New(slog.DiscardHandler)
+}
 
 const testDocument = `<html><head><title>Foo</title></head><body><article>` +
 	`<p>A paragraph long enough for readability to treat it as the main ` +
@@ -26,11 +33,12 @@ func TestSetLocationColonPath(t *testing.T) {
 		t.Run(location, func(t *testing.T) {
 			t.Chdir(t.TempDir())
 
-			if err := os.WriteFile(location, []byte(testDocument), 0o644); err != nil {
+			err := os.WriteFile(location, []byte(testDocument), 0o644)
+			if err != nil {
 				t.Fatal(err)
 			}
 
-			c := New(zap.NewNop())
+			c := New(discardLogger())
 			defer c.Close()
 
 			c.SetLocation(location)
@@ -67,7 +75,7 @@ func TestProxyFromEnvironment(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.location, func(t *testing.T) {
-			c := New(zap.NewNop())
+			c := New(discardLogger())
 			defer c.Close()
 
 			c.SetLocation(tc.location)
@@ -82,11 +90,12 @@ func TestProxyFromEnvironment(t *testing.T) {
 func TestFromAutoRouting(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	if err := os.WriteFile("http:not-a-url.html", []byte(testDocument), 0o644); err != nil {
+	err := os.WriteFile("http:not-a-url.html", []byte(testDocument), 0o644)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	c := New(zap.NewNop())
+	c := New(discardLogger())
 	defer c.Close()
 
 	c.SetLocation("http:not-a-url.html")
@@ -95,11 +104,157 @@ func TestFromAutoRouting(t *testing.T) {
 		t.Fatalf("FromAuto: %v", err)
 	}
 
-	body, err := io.ReadAll(c.GetSource())
+	body, err := io.ReadAll(c.Source())
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(body) != testDocument {
 		t.Errorf("source was not read from disk: %q", string(body))
+	}
+}
+
+func TestFromAutoWithoutLocation(t *testing.T) {
+	c := New(nil)
+	defer c.Close()
+
+	if err := c.FromAuto(false); !errors.Is(err, ErrNoLocation) {
+		t.Errorf("err = %v, want %v", err, ErrNoLocation)
+	}
+}
+
+func TestNewWithoutLoggerDoesNotPanic(t *testing.T) {
+	c := New(nil)
+	defer c.Close()
+
+	c.SetLocation(StdinLocation)
+
+	if err := c.FromAuto(false); err != nil {
+		t.Fatalf("FromAuto: %v", err)
+	}
+}
+
+func TestFromHTTP(t *testing.T) {
+	var gotUserAgent string
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			gotUserAgent = r.Header.Get("User-Agent")
+			w.Header().Set("Content-Type", "text/html")
+			io.WriteString(w, testDocument)
+		}))
+	defer server.Close()
+
+	c := New(discardLogger())
+	defer c.Close()
+
+	c.SetLocation(server.URL)
+
+	article, err := c.GetReadable(false)
+	if err != nil {
+		t.Fatalf("GetReadable: %v", err)
+	}
+	if article.Title != "Foo" {
+		t.Errorf("title = %q, want %q", article.Title, "Foo")
+	}
+	if gotUserAgent != DefaultUserAgent {
+		t.Errorf("user agent = %q, want %q", gotUserAgent, DefaultUserAgent)
+	}
+}
+
+func TestFromHTTPStatusError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "gone", http.StatusGone)
+		}))
+	defer server.Close()
+
+	c := New(discardLogger())
+	defer c.Close()
+
+	c.SetLocation(server.URL)
+
+	err := c.FromHTTP()
+
+	var statusErr *StatusError
+	if !errors.As(err, &statusErr) {
+		t.Fatalf("err = %v, want *StatusError", err)
+	}
+	if statusErr.StatusCode != http.StatusGone {
+		t.Errorf("status = %d, want %d", statusErr.StatusCode, http.StatusGone)
+	}
+	if !strings.Contains(statusErr.Error(), "410 Gone") {
+		t.Errorf("message = %q, want it to mention 410 Gone", statusErr.Error())
+	}
+	if c.Source() != nil {
+		t.Error("source was set despite the error")
+	}
+}
+
+func TestStatusErrorUnknownCode(t *testing.T) {
+	err := &StatusError{Location: "http://example.com", StatusCode: 599}
+
+	if !strings.Contains(err.Error(), "599") {
+		t.Errorf("message = %q, want it to mention 599", err.Error())
+	}
+}
+
+func TestFromFileDirectory(t *testing.T) {
+	dir := t.TempDir()
+
+	c := New(discardLogger())
+	defer c.Close()
+
+	c.SetLocation(dir)
+
+	err := c.FromAuto(false)
+	if err == nil {
+		t.Fatal("reading a directory succeeded")
+	}
+	if !strings.Contains(err.Error(), "is a directory") {
+		t.Errorf("err = %v, want it to mention a directory", err)
+	}
+}
+
+func TestCloseIsIdempotent(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	if err := os.WriteFile("page.html", []byte(testDocument), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := New(discardLogger())
+	c.SetLocation("page.html")
+
+	if err := c.FromAuto(false); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if err := c.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	}
+	if c.Source() != nil {
+		t.Error("source is still set after Close")
+	}
+}
+
+func TestTimeoutSeconds(t *testing.T) {
+	cases := []struct {
+		timeout time.Duration
+		want    int
+	}{
+		{0, 0},
+		{-time.Second, 0},
+		{time.Millisecond, 1},
+		{30 * time.Second, 30},
+		{90 * time.Second, 90},
+	}
+
+	for _, tc := range cases {
+		c := New(nil)
+		c.Timeout = tc.timeout
+
+		if got := c.timeoutSeconds(); got != tc.want {
+			t.Errorf("timeoutSeconds(%s) = %d, want %d", tc.timeout, got, tc.want)
+		}
 	}
 }
